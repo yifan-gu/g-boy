@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ESP32Servo.h>
-#include <ESPmDNS.h> // Include mDNS library
+#include <ESPmDNS.h>
 
 
 // Pin configuration
@@ -11,7 +11,7 @@
 // Access Point credentials
 const char* ssid = "RC_Controller";
 const char* password = "12345678"; // Minimum 8 characters
-const char* hostname = "rc_controller"; // mDNS hostname
+const char* hostname = "g-boy"; // mDNS hostname
 
 
 // Async WebSocket server
