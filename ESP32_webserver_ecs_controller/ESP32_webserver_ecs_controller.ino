@@ -3,6 +3,8 @@
 #include <ESP32Servo.h>
 #include <ESPmDNS.h>
 
+#include "index_html.h"
+
 
 // Pin configuration
 #define STEERING_PIN 3  // GPIO3 for steering
@@ -43,7 +45,7 @@ void setup() {
 
 void loop() {
   runESCController();
-  runSafeGuard();
+  //runSafeGuard();
 }
 
 void setupESC() {
@@ -86,22 +88,8 @@ void setupWebServer() {
 
   // Serve static files
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send(200, "text/html", R"rawliteral(
-      <!DOCTYPE html>
-      <html>
-      <body>
-      <h1>RC Controller</h1>
-      <script>
-        const ws = new WebSocket('ws://' + location.host + '/ws');
-        ws.onopen = () => console.log('WebSocket connected');
-        ws.onclose = () => console.log('WebSocket disconnected');
-        ws.onmessage = (event) => console.log('Received: ' + event.data);
-        const send = (param, value) => ws.send(param + '=' + value);
-      </script>
-      </body>
-      </html>
-    )rawliteral");
-  });
+    request->send(200, "text/html", index_html);
+    });
 
   // Start server
   server.begin();
@@ -129,7 +117,8 @@ void runESCController() {
    steering.writeMicroseconds(steeringValue);
 
    Serial.print("Throttle: ");
-   Serial.println(throttleValue);
+   Serial.print(throttleValue);
+   Serial.print(" | ");
    Serial.print("Steering: ");
    Serial.println(steeringValue);
 }
