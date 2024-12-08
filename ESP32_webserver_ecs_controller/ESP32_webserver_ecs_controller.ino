@@ -31,9 +31,6 @@ const int minSteering = 1000, maxSteering = 2000, midSteering = 1500;
 // Variables to store values
 int throttleValue = midThrottle, steeringValue = midSteering;
 
-unsigned long lastInteractionTime = 0;
-const unsigned long SAFE_GUARD_TIMEOUT = 1000; // 1 second timeout
-
 void setup() {
   // Start Serial for debugging
   Serial.begin(115200);
@@ -45,7 +42,6 @@ void setup() {
 
 void loop() {
   runESCController();
-  //runSafeGuard();
 }
 
 void setupESC() {
@@ -98,17 +94,45 @@ void setupWebServer() {
 // Handle WebSocket events
 void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                       AwsEventType type, void *arg, uint8_t *data, size_t len) {
-  if (type == WS_EVT_DATA) {
-    String message = String((char*)data).substring(0, len);
-    Serial.println("Message received: " + message);
+  switch (type) {
+    case WS_EVT_CONNECT:
+      Serial.println("WebSocket connected");
+      break;
 
-    // Parse throttle and steering
-    if (message.startsWith("throttle=")) {
-      throttleValue = map(message.substring(9).toInt(), -1000, 1000, minThrottle, maxThrottle);
-    } else if (message.startsWith("steering=")) {
-      steeringValue = map(message.substring(9).toInt(), -1000, 1000, minSteering, maxSteering);
+    case WS_EVT_DISCONNECT:
+      Serial.println("WebSocket disconnected");
+
+      // Reset throttle and steering to mid position
+      throttleValue = midThrottle;
+      steeringValue = midSteering;
+
+      Serial.println("Throttle and Steering reset to middle positions");
+      break;
+
+    case WS_EVT_DATA: {
+      String message = String((char*)data).substring(0, len);
+      Serial.println("Message received: " + message);
+
+      // Parse throttle and steering
+      if (message.startsWith("throttle=")) {
+        throttleValue = map(message.substring(9).toInt(), -1000, 1000, minThrottle, maxThrottle);
+      } else if (message.startsWith("steering=")) {
+        steeringValue = map(message.substring(9).toInt(), -1000, 1000, minSteering, maxSteering);
+      }
+      break;
     }
-    lastInteractionTime = millis(); // Reset the last interaction timestamp.
+
+    case WS_EVT_ERROR:
+      Serial.println("WebSocket error");
+      break;
+
+    case WS_EVT_PONG:
+      Serial.println("WebSocket pong received");
+      break;
+
+    default:
+      Serial.println("Unknown WebSocket event");
+      break;
   }
 }
 
@@ -116,17 +140,9 @@ void runESCController() {
    throttle.writeMicroseconds(throttleValue);
    steering.writeMicroseconds(steeringValue);
 
-   Serial.print("Throttle: ");
+   /*Serial.print("Throttle: ");
    Serial.print(throttleValue);
    Serial.print(" | ");
    Serial.print("Steering: ");
-   Serial.println(steeringValue);
-}
-
-void runSafeGuard() {
-  unsigned long currentTime = millis();
-  if (currentTime - lastInteractionTime > SAFE_GUARD_TIMEOUT) {
-    throttleValue = midThrottle; // Midpoint value
-    steeringValue = midSteering; // Midpoint value
-  }
+   Serial.println(steeringValue);*/
 }

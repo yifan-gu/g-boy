@@ -102,20 +102,36 @@ const char* index_html = R"rawliteral(
         <input type="range" id="throttle" min="-1000" max="1000" value="0" class="vertical-slider">
     </div>
     <script>
-        // WebSocket connection
-        const ws = new WebSocket(`ws://${location.host}/ws`);
+        // WebSocket connection and reconnection logic
+        let ws;
+        let reconnectInterval = 500; // Reconnection attempt interval (in ms)
+        let pongInterval; // Interval for sending pong
 
-        ws.onopen = () => {
-            console.log("WebSocket connected");
+        const connectWebSocket = () => {
+            ws = new WebSocket(`ws://${location.host}/ws`);
+
+            ws.onopen = () => {
+                console.log("WebSocket connected");
+            };
+
+            ws.onmessage = (event) => {
+                console.log("Message from server:", event.data);
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket disconnected. Attempting to reconnect...");
+                clearInterval(pongInterval); // Stop sending pongs when disconnected
+                setTimeout(connectWebSocket, reconnectInterval); // Attempt to reconnect
+            };
+
+            ws.onerror = (error) => {
+                console.error("WebSocket error:", error);
+                ws.close(); // Ensure the connection is closed before reconnecting
+            };
         };
 
-        ws.onclose = () => {
-            console.log("WebSocket disconnected");
-        };
-
-        ws.onerror = (error) => {
-            console.error("WebSocket error:", error);
-        };
+        // Establish initial WebSocket connection
+        connectWebSocket();
 
         // Slider elements and value displays
         const throttleSlider = document.getElementById("throttle");
@@ -130,17 +146,64 @@ const char* index_html = R"rawliteral(
             }
         };
 
-        // Event listeners for sliders
+        // Function to smoothly reset a slider to the center
+        const resetSlider = (slider, valueElement, param, duration = 300) => {
+            const startValue = parseInt(slider.value, 10);
+            const targetValue = 0;
+            const startTime = performance.now();
+
+            const animateReset = (currentTime) => {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const newValue = Math.round(startValue + (targetValue - startValue) * progress);
+
+                slider.value = newValue;
+                valueElement.textContent = newValue;
+
+                // Send intermediate value
+                sendData(param, newValue);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateReset);
+                } else {
+                    // Ensure the final value is sent as exactly 0
+                    slider.value = targetValue;
+                    valueElement.textContent = targetValue;
+                    sendData(param, targetValue);
+                }
+            };
+
+            requestAnimationFrame(animateReset);
+        };
+
+        // Event listeners for throttle slider
         throttleSlider.addEventListener("input", () => {
             const value = throttleSlider.value;
             throttleValue.textContent = value;
             sendData("throttle", value);
         });
 
+        throttleSlider.addEventListener("mouseup", () => {
+            resetSlider(throttleSlider, throttleValue, "throttle");
+        });
+
+        throttleSlider.addEventListener("touchend", () => {
+            resetSlider(throttleSlider, throttleValue, "throttle");
+        });
+
+        // Event listeners for steering slider
         steeringSlider.addEventListener("input", () => {
             const value = steeringSlider.value;
             steeringValue.textContent = value;
             sendData("steering", value);
+        });
+
+        steeringSlider.addEventListener("mouseup", () => {
+            resetSlider(steeringSlider, steeringValue, "steering");
+        });
+
+        steeringSlider.addEventListener("touchend", () => {
+            resetSlider(steeringSlider, steeringValue, "steering");
         });
     </script>
 </body>
