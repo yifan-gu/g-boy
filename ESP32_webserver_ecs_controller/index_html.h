@@ -79,6 +79,7 @@ const char* index_html = R"rawliteral(
             background: #bdc3c7;
             outline: none;
             border-radius: 10px;
+            transform: rotate(180deg); /* Flip the slider */
             cursor: pointer;
         }
         .horizontal-slider::-webkit-slider-thumb {
@@ -96,10 +97,10 @@ const char* index_html = R"rawliteral(
     <div class="output-horizontal">Steering: <span id="steering-value">0</span></div>
     <div class="output-vertical">Throttle: <span id="throttle-value">0</span></div>
     <div class="slider-container-horizontal">
-        <input type="range" id="steering" min="-1000" max="1000" value="0" class="horizontal-slider">
+        <input type="range" id="steering" min="1000" max="2000" value="1500" class="horizontal-slider">
     </div>
     <div class="slider-container-vertical">
-        <input type="range" id="throttle" min="-1000" max="1000" value="0" class="vertical-slider">
+        <input type="range" id="throttle" min="1000" max="2000" value="1500" class="vertical-slider">
     </div>
     <script>
         // WebSocket connection and heartbeat logic
@@ -163,7 +164,7 @@ const char* index_html = R"rawliteral(
         // Function to smoothly reset a slider to the center
         const resetSlider = (slider, valueElement, param, duration = 300) => {
             const startValue = parseInt(slider.value, 10);
-            const targetValue = 0;
+            const targetValue = 1500;
             const startTime = performance.now();
 
             const animateReset = (currentTime) => {

@@ -46,7 +46,6 @@ void setup() {
 
 void loop() {
   runESCController();
-  runClientFeedback();
   runClientHealthCheck();
 }
 
@@ -107,11 +106,8 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 
     case WS_EVT_DISCONNECT:
       Serial.println("WebSocket disconnected");
-
-      // Reset throttle and steering to mid position
       throttleValue = midThrottle;
       steeringValue = midSteering;
-
       Serial.println("Throttle and Steering reset to middle positions");
       break;
 
@@ -119,15 +115,19 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       String message = String((char*)data).substring(0, len);
       Serial.println("Message received: " + message);
 
-      // Handle PING-PONG messages
+      // Handle REQUEST_DATA message
       if (message == "PING") {
-        client->text("PONG"); // Respond with "PONG"
+        client->text("PONG");
         Serial.println("PONG sent to client");
         lastPingTime = millis();
+      } else if (message == "REQUEST_DATA") {
+        String response = String("{\"throttle\":") + throttleValue + ",\"steering\":" + steeringValue + "}";
+        client->text(response); // Send data to the requesting client
+        Serial.println("Sent data to client: " + response);
       } else if (message.startsWith("throttle=")) {
-        throttleValue = map(message.substring(9).toInt(), -1000, 1000, minThrottle, maxThrottle);
+        throttleValue = map(message.substring(9).toInt(), 1000, 2000, minThrottle, maxThrottle);
       } else if (message.startsWith("steering=")) {
-        steeringValue = map(message.substring(9).toInt(), -1000, 1000, minSteering, maxSteering);
+        steeringValue = map(message.substring(9).toInt(), 1000, 2000, minSteering, maxSteering);
       }
       break;
     }
@@ -151,10 +151,6 @@ void runESCController() {
    Serial.print(" | ");
    Serial.print("Steering: ");
    Serial.println(steeringValue);*/
-}
-
-void runClientFeedback() {
-
 }
 
 void runClientHealthCheck() {
