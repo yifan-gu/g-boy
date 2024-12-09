@@ -114,16 +114,12 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     case WS_EVT_DATA: {
       String message = String((char*)data).substring(0, len);
       Serial.println("Message received: " + message);
-
-      // Handle REQUEST_DATA message
-      if (message == "PING") {
-        client->text("PONG");
-        Serial.println("PONG sent to client");
-        lastPingTime = millis();
-      } else if (message == "REQUEST_DATA") {
+      lastPingTime = millis();
+      
+      if (message == "REQUEST_DATA") {
         String response = String("{\"throttle\":") + throttleValue + ",\"steering\":" + steeringValue + "}";
         client->text(response); // Send data to the requesting client
-        Serial.println("Sent data to client: " + response);
+        //Serial.println("Sent data to client: " + response);
       } else if (message.startsWith("throttle=")) {
         throttleValue = map(message.substring(9).toInt(), 1000, 2000, minThrottle, maxThrottle);
       } else if (message.startsWith("steering=")) {

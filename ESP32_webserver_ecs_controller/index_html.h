@@ -27,13 +27,6 @@ const char* index_html = R"rawliteral(
             font-size: 18px;
             text-align: left;
         }
-        .output-vertical {
-            position: absolute;
-            top: 50px;
-            left: 10px;
-            font-size: 18px;
-            text-align: left;
-        }
         .slider-container-horizontal {
             position: absolute;
             bottom: 5%;
@@ -94,8 +87,7 @@ const char* index_html = R"rawliteral(
     </style>
 </head>
 <body>
-    <div class="output-horizontal">Steering: <span id="steering-value">0</span></div>
-    <div class="output-vertical">Throttle: <span id="throttle-value">0</span></div>
+    <div class="output-horizontal">Throttle: <span id="throttle-value">1500</span>, Steering: <span id="steering-value">1500</span></div>
     <div class="slider-container-horizontal">
         <input type="range" id="steering" min="1000" max="2000" value="1500" class="horizontal-slider">
     </div>
@@ -103,10 +95,15 @@ const char* index_html = R"rawliteral(
         <input type="range" id="throttle" min="1000" max="2000" value="1500" class="vertical-slider">
     </div>
     <script>
-        // WebSocket connection and heartbeat logic
+        // WebSocket connection and polling logic
         let ws;
-        let reconnectInterval = 500; // Reconnection interval (ms)
-        let heartbeatInterval; // Interval for sending "PING"
+        const reconnectInterval = 500; // Reconnection interval (ms)
+        const pollInterval = 100; // Polling interval (ms)
+
+        const throttleValue = document.getElementById("throttle-value");
+        const steeringValue = document.getElementById("steering-value");
+        const throttleSlider = document.getElementById("throttle");
+        const steeringSlider = document.getElementById("steering");
 
         const connectWebSocket = () => {
             ws = new WebSocket(`ws://${location.host}/ws`);
@@ -114,29 +111,34 @@ const char* index_html = R"rawliteral(
             ws.onopen = () => {
                 console.log("WebSocket connected");
 
-                // Start sending "PING" messages every 500ms
-                clearInterval(heartbeatInterval); // Clear existing interval
-                heartbeatInterval = setInterval(() => {
+                // Start polling server for data every `pollInterval` ms
+                setInterval(() => {
                     if (ws.readyState === WebSocket.OPEN) {
-                        ws.send("PING"); // Send "PING" to server
-                        console.log("PING sent");
+                        ws.send("REQUEST_DATA"); // Send request to server
                     }
-                }, 500);
+                }, pollInterval);
             };
 
             ws.onmessage = (event) => {
                 console.log("Message from server:", event.data);
 
-                // Handle server's "PONG" response
-                if (event.data === "PONG") {
-                    console.log("PONG received");
+                // Parse the JSON response and update UI
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.throttle !== undefined) {
+                        throttleValue.textContent = data.throttle;
+                    }
+                    if (data.steering !== undefined) {
+                        steeringValue.textContent = data.steering;
+                    }
+                } catch (err) {
+                    console.error("Error parsing message:", err);
                 }
             };
 
             ws.onclose = () => {
                 console.log("WebSocket disconnected. Attempting to reconnect...");
-                clearInterval(heartbeatInterval); // Stop sending "PING" when disconnected
-                setTimeout(connectWebSocket, reconnectInterval); // Attempt to reconnect
+                setTimeout(connectWebSocket, reconnectInterval);
             };
 
             ws.onerror = (error) => {
@@ -148,21 +150,8 @@ const char* index_html = R"rawliteral(
         // Establish initial WebSocket connection
         connectWebSocket();
 
-        // Slider elements and value displays
-        const throttleSlider = document.getElementById("throttle");
-        const throttleValue = document.getElementById("throttle-value");
-        const steeringSlider = document.getElementById("steering");
-        const steeringValue = document.getElementById("steering-value");
-
-        // Send slider data via WebSocket
-        const sendData = (param, value) => {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(`${param}=${value}`);
-            }
-        };
-
         // Function to smoothly reset a slider to the center
-        const resetSlider = (slider, valueElement, param, duration = 300) => {
+        const resetSlider = (slider, param, duration = 300) => {
             const startValue = parseInt(slider.value, 10);
             const targetValue = 1500;
             const startTime = performance.now();
@@ -173,18 +162,20 @@ const char* index_html = R"rawliteral(
                 const newValue = Math.round(startValue + (targetValue - startValue) * progress);
 
                 slider.value = newValue;
-                valueElement.textContent = newValue;
 
                 // Send intermediate value
-                sendData(param, newValue);
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(`${param}=${newValue}`);
+                }
 
                 if (progress < 1) {
                     requestAnimationFrame(animateReset);
                 } else {
-                    // Ensure the final value is sent as exactly 0
+                    // Ensure the final value is sent as exactly 1500
                     slider.value = targetValue;
-                    valueElement.textContent = targetValue;
-                    sendData(param, targetValue);
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(`${param}=${targetValue}`);
+                    }
                 }
             };
 
@@ -193,32 +184,32 @@ const char* index_html = R"rawliteral(
 
         // Event listeners for throttle slider
         throttleSlider.addEventListener("input", () => {
-            const value = throttleSlider.value;
-            throttleValue.textContent = value;
-            sendData("throttle", value);
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(`throttle=${throttleSlider.value}`);
+            }
         });
 
         throttleSlider.addEventListener("mouseup", () => {
-            resetSlider(throttleSlider, throttleValue, "throttle");
+            resetSlider(throttleSlider, "throttle");
         });
 
         throttleSlider.addEventListener("touchend", () => {
-            resetSlider(throttleSlider, throttleValue, "throttle");
+            resetSlider(throttleSlider, "throttle");
         });
 
         // Event listeners for steering slider
         steeringSlider.addEventListener("input", () => {
-            const value = steeringSlider.value;
-            steeringValue.textContent = value;
-            sendData("steering", value);
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(`steering=${steeringSlider.value}`);
+            }
         });
 
         steeringSlider.addEventListener("mouseup", () => {
-            resetSlider(steeringSlider, steeringValue, "steering");
+            resetSlider(steeringSlider, "steering");
         });
 
         steeringSlider.addEventListener("touchend", () => {
-            resetSlider(steeringSlider, steeringValue, "steering");
+            resetSlider(steeringSlider, "steering");
         });
     </script>
 </body>
