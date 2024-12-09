@@ -31,6 +31,10 @@ const int minSteering = 1000, maxSteering = 2000, midSteering = 1500;
 // Variables to store values
 int throttleValue = midThrottle, steeringValue = midSteering;
 
+// Heartbeat tracking
+unsigned long lastPingTime = 0;           // Time of last received ping
+const unsigned long heartbeatTimeout = 1000; // 1 second timeout
+
 void setup() {
   // Start Serial for debugging
   Serial.begin(115200);
@@ -42,6 +46,8 @@ void setup() {
 
 void loop() {
   runESCController();
+  runClientFeedback();
+  runClientHealthCheck();
 }
 
 void setupESC() {
@@ -113,8 +119,12 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       String message = String((char*)data).substring(0, len);
       Serial.println("Message received: " + message);
 
-      // Parse throttle and steering
-      if (message.startsWith("throttle=")) {
+      // Handle PING-PONG messages
+      if (message == "PING") {
+        client->text("PONG"); // Respond with "PONG"
+        Serial.println("PONG sent to client");
+        lastPingTime = millis();
+      } else if (message.startsWith("throttle=")) {
         throttleValue = map(message.substring(9).toInt(), -1000, 1000, minThrottle, maxThrottle);
       } else if (message.startsWith("steering=")) {
         steeringValue = map(message.substring(9).toInt(), -1000, 1000, minSteering, maxSteering);
@@ -124,10 +134,6 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 
     case WS_EVT_ERROR:
       Serial.println("WebSocket error");
-      break;
-
-    case WS_EVT_PONG:
-      Serial.println("WebSocket pong received");
       break;
 
     default:
@@ -145,4 +151,18 @@ void runESCController() {
    Serial.print(" | ");
    Serial.print("Steering: ");
    Serial.println(steeringValue);*/
+}
+
+void runClientFeedback() {
+
+}
+
+void runClientHealthCheck() {
+  // Check for heartbeat timeout
+  if (millis() - lastPingTime > heartbeatTimeout) {
+    Serial.println("Heartbeat timeout, reset");
+    throttleValue = midThrottle; // Reset throttle and steering
+    steeringValue = midSteering;
+    lastPingTime = millis(); // Reset timer to avoid repeated timeouts
+  }
 }

@@ -102,25 +102,39 @@ const char* index_html = R"rawliteral(
         <input type="range" id="throttle" min="-1000" max="1000" value="0" class="vertical-slider">
     </div>
     <script>
-        // WebSocket connection and reconnection logic
+        // WebSocket connection and heartbeat logic
         let ws;
-        let reconnectInterval = 500; // Reconnection attempt interval (in ms)
-        let pongInterval; // Interval for sending pong
+        let reconnectInterval = 500; // Reconnection interval (ms)
+        let heartbeatInterval; // Interval for sending "PING"
 
         const connectWebSocket = () => {
             ws = new WebSocket(`ws://${location.host}/ws`);
 
             ws.onopen = () => {
                 console.log("WebSocket connected");
+
+                // Start sending "PING" messages every 500ms
+                clearInterval(heartbeatInterval); // Clear existing interval
+                heartbeatInterval = setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send("PING"); // Send "PING" to server
+                        console.log("PING sent");
+                    }
+                }, 500);
             };
 
             ws.onmessage = (event) => {
                 console.log("Message from server:", event.data);
+
+                // Handle server's "PONG" response
+                if (event.data === "PONG") {
+                    console.log("PONG received");
+                }
             };
 
             ws.onclose = () => {
                 console.log("WebSocket disconnected. Attempting to reconnect...");
-                clearInterval(pongInterval); // Stop sending pongs when disconnected
+                clearInterval(heartbeatInterval); // Stop sending "PING" when disconnected
                 setTimeout(connectWebSocket, reconnectInterval); // Attempt to reconnect
             };
 
