@@ -37,8 +37,13 @@ const unsigned long heartbeatTimeout = 1000; // 1 second timeout
 
 void setup() {
   // Start Serial for debugging
+  unsigned long startTime = millis();
+  unsigned long timeout = 1000; // 1 seconds timeout
+
   Serial.begin(115200);
-  while (!Serial);
+  while (!Serial && (millis() - startTime < timeout)) {
+    // Wait for Serial or timeout
+  }
 
   setupESC();
   setupWebServer();
