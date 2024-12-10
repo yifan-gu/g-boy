@@ -28,6 +28,9 @@ Servo steering;
 const int minThrottle = 1000, maxThrottle = 2000, midThrottle = 1500;
 const int minSteering = 1000, maxSteering = 2000, midSteering = 1500;
 
+// Variable to toggle the manual vs auto mode.
+boolean isAutoMode = false;
+
 // Variables to store values
 int throttleValue = midThrottle, steeringValue = midSteering;
 
@@ -144,6 +147,24 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         response += "}";
         client->text(response); // Send data to the requesting client
         //Serial.println("Sent data to client: " + response);
+      } else if (message.startsWith("mode=")) {
+        if (message == "mode=auto") {
+          isAutoMode = true;
+          Serial.println("Switched to Auto Mode");
+        } else if (message == "mode=manual") {
+          isAutoMode = false;
+          Serial.println("Switched to Manual Mode");
+        }
+      } else if (message.startsWith("x=") && message.indexOf("&y=") > 0) {
+        // Parse coordinates when switching to auto mode
+        int xIndex = message.indexOf("x=") + 2;
+        int yIndex = message.indexOf("&y=") + 3;
+        targetX = message.substring(xIndex, message.indexOf("&y=")).toFloat();
+        targetY = message.substring(yIndex).toFloat();
+        Serial.print("Updated Target Coordinates: X = ");
+        Serial.print(targetX);
+        Serial.print(", Y = ");
+        Serial.println(targetY);
       } else if (message.startsWith("throttle=")) {
         throttleValue = map(message.substring(9).toInt(), 1000, 2000, minThrottle, maxThrottle);
       } else if (message.startsWith("steering=")) {

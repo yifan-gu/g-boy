@@ -267,322 +267,330 @@ char const* index_html = R"rawliteral(
         </div>
 
         <script>
-         document.addEventListener("dblclick", (e) => e.preventDefault());
-         document.addEventListener("contextmenu", (e) => e.preventDefault());
+            document.addEventListener("dblclick", (e) => e.preventDefault());
+            document.addEventListener("contextmenu", (e) => e.preventDefault());
 
-         const canvas = document.getElementById("coordinate-system");
-         const ctx = canvas.getContext("2d");
+            const canvas = document.getElementById("coordinate-system");
+            const ctx = canvas.getContext("2d");
 
-         let scale = 1;
-         const scaleStep = 0.2;
-         const minScale = 0.25;
-         const maxScale = 5;
-         const defaultScale = 1;
+            let scale = 1;
+            const scaleStep = 0.2;
+            const minScale = 0.25;
+            const maxScale = 5;
+            const defaultScale = 1;
 
-         let data = {
-             x: 0,
-             y: 0,
-             dF: 0,
-             dL: 0,
-             dR: 0,
-             steering: 0,
-             throttle: 0,
-         };
+            let data = {
+                x: 0,
+                y: 0,
+                dF: 0,
+                dL: 0,
+                dR: 0,
+                steering: 0,
+                throttle: 0,
+            };
 
-         function updateInfoPanel() {
-             document.getElementById("dF").textContent = `dF: ${data.dF}`;
-             document.getElementById("dL").textContent = `dL: ${data.dL}`;
-             document.getElementById("dR").textContent = `dR: ${data.dR}`;
-         }
+            function updateInfoPanel() {
+                document.getElementById("dF").textContent = `dF: ${data.dF}`;
+                document.getElementById("dL").textContent = `dL: ${data.dL}`;
+                document.getElementById("dR").textContent = `dR: ${data.dR}`;
+            }
 
-         function updateLocationPanel() {
-             const currentLocationElement = document.getElementById("current-location");
-             const targetLocationElement = document.getElementById("target-location");
+            function updateLocationPanel() {
+                const currentLocationElement = document.getElementById("current-location");
+                const targetLocationElement = document.getElementById("target-location");
 
-             currentLocationElement.textContent = `current (${data.x}, ${data.y})`;
-             if (!isAutoMode) {
-                 targetLocationElement.textContent = `target (${data.x}, ${data.y})`;
-             }
-         }
+                currentLocationElement.textContent = `current (${data.x}, ${data.y})`;
+                if (!isAutoMode) {
+                    targetLocationElement.textContent = `target (${data.x}, ${data.y})`;
+                }
+            }
 
-         function updateSteeringThrottlePanel() {
-             document.getElementById("steering-value").textContent = `Steering: ${data.steering}`;
-             document.getElementById("throttle-value").textContent = `Throttle: ${data.throttle}`;
-         }
+            function updateSteeringThrottlePanel() {
+                document.getElementById("steering-value").textContent = `Steering: ${data.steering}`;
+                document.getElementById("throttle-value").textContent = `Throttle: ${data.throttle}`;
+            }
 
-         function updateSliders() {
-             if (isAutoMode) {
-                 document.getElementById("steering-slider").value = data.steering;
-                 document.getElementById("throttle-slider").value = data.throttle;
-             }
-         }
+            function updateSliders() {
+                if (isAutoMode) {
+                    document.getElementById("steering-slider").value = data.steering;
+                    document.getElementById("throttle-slider").value = data.throttle;
+                }
+            }
 
-         const toggleButton = document.getElementById("toggle-button");
-         const modeLabel = document.getElementById("mode-label");
+            const toggleButton = document.getElementById("toggle-button");
+            const modeLabel = document.getElementById("mode-label");
 
-         let isAutoMode = false;
+            let isAutoMode = false;
 
-         toggleButton.addEventListener("click", () => {
-             isAutoMode = !isAutoMode;
-             toggleButton.classList.toggle("active");
-             modeLabel.textContent = isAutoMode ? "Auto Mode" : "Manual Mode";
+            toggleButton.addEventListener("click", () => {
+                isAutoMode = !isAutoMode;
+                toggleButton.classList.toggle("active");
+                modeLabel.textContent = isAutoMode ? "Auto Mode" : "Manual Mode";
 
-             // Snapshot the target location.
-             const targetLocationElement = document.getElementById("target-location");
-             if (isAutoMode) {
-                 targetLocationElement.style.color = "#3498db";
-             } else {
-                 targetLocationElement.style.color = "white";
-             }
+                // Send mode and coordinates to the server
+                if (ws.readyState === WebSocket.OPEN) {
+                    const modeMessage = isAutoMode ? "mode=auto" : "mode=manual";
+                    ws.send(modeMessage);
 
-             // Enable or disable sliders based on mode
-             const sliders = document.querySelectorAll("#steering-slider, #throttle-slider");
-             sliders.forEach((slider) => {
-                 slider.disabled = isAutoMode; // Disable input when auto mode is on
-             });
-         });
+                    if (isAutoMode) {
+                        // Send current x and y as target coordinates
+                        const coordinatesMessage = `x=${data.x}&y=${data.y}`;
+                        ws.send(coordinatesMessage);
+                    }
+                }
 
-         let lastTouchDistance = null;
-         let isTouchingToggle = false;
+                // Update UI
+                const targetLocationElement = document.getElementById("target-location");
+                targetLocationElement.style.color = isAutoMode ? "#3498db" : "white";
 
-         // Handle pinch-to-zoom and ensure it doesn't interfere with toggle button
-         canvas.addEventListener("touchstart", (event) => {
-             if (event.touches.length === 1) {
-                 const touch = event.touches[0];
-                 const rect = toggleButton.getBoundingClientRect();
-                 isTouchingToggle = touch.pageX >= rect.left && touch.pageX <= rect.right && touch.pageY >= rect.top && touch.pageY <= rect.bottom;
-             }
-             if (event.touches.length === 2) {
-                 lastTouchDistance = Math.hypot(event.touches[1].pageX - event.touches[0].pageX, event.touches[1].pageY - event.touches[0].pageY);
-             }
-         });
+                // Enable or disable sliders based on mode
+                const sliders = document.querySelectorAll("#steering-slider, #throttle-slider");
+                sliders.forEach((slider) => {
+                    slider.disabled = isAutoMode; // Disable input when auto mode is on
+                });
+            });
 
-         canvas.addEventListener("touchmove", (event) => {
-             if (isTouchingToggle || event.touches.length !== 2) return;
+            let lastTouchDistance = null;
+            let isTouchingToggle = false;
 
-             const touch1 = event.touches[0];
-             const touch2 = event.touches[1];
-             const distance = Math.hypot(touch2.pageX - touch1.pageX, touch2.pageY - touch1.pageY);
+            // Handle pinch-to-zoom and ensure it doesn't interfere with toggle button
+            canvas.addEventListener("touchstart", (event) => {
+                if (event.touches.length === 1) {
+                    const touch = event.touches[0];
+                    const rect = toggleButton.getBoundingClientRect();
+                    isTouchingToggle = touch.pageX >= rect.left && touch.pageX <= rect.right && touch.pageY >= rect.top && touch.pageY <= rect.bottom;
+                }
+                if (event.touches.length === 2) {
+                    lastTouchDistance = Math.hypot(event.touches[1].pageX - event.touches[0].pageX, event.touches[1].pageY - event.touches[0].pageY);
+                }
+            });
 
-             if (lastTouchDistance !== null) {
-                 const scaleChange = (distance - lastTouchDistance) / 100;
-                 scale = Math.min(maxScale, Math.max(minScale, scale + scaleChange));
-                 drawCoordinateSystem();
-             }
-             lastTouchDistance = distance;
-         });
+            canvas.addEventListener("touchmove", (event) => {
+                if (isTouchingToggle || event.touches.length !== 2) return;
 
-         canvas.addEventListener("touchend", (event) => {
-             if (event.touches.length === 0) {
-                 isTouchingToggle = false;
-                 lastTouchDistance = null;
-             }
-         });
+                const touch1 = event.touches[0];
+                const touch2 = event.touches[1];
+                const distance = Math.hypot(touch2.pageX - touch1.pageX, touch2.pageY - touch1.pageY);
 
-         function drawCar(centerX, centerY) {
-             ctx.fillStyle = "white";
-             ctx.beginPath();
-             ctx.moveTo(centerX, centerY - 15);
-             ctx.lineTo(centerX - 15, centerY + 15);
-             ctx.lineTo(centerX + 15, centerY + 15);
-             ctx.closePath();
-             ctx.fill();
-         }
+                if (lastTouchDistance !== null) {
+                    const scaleChange = (distance - lastTouchDistance) / 100;
+                    scale = Math.min(maxScale, Math.max(minScale, scale + scaleChange));
+                    drawCoordinateSystem();
+                }
+                lastTouchDistance = distance;
+            });
 
-         function drawTarget(centerX, centerY) {
-             ctx.fillStyle = "#3498db";
-             ctx.beginPath();
-             ctx.moveTo(centerX, centerY - 15);
-             ctx.lineTo(centerX - 15, centerY + 15);
-             ctx.lineTo(centerX + 15, centerY + 15);
-             ctx.closePath();
-             ctx.fill();
-         }
+            canvas.addEventListener("touchend", (event) => {
+                if (event.touches.length === 0) {
+                    isTouchingToggle = false;
+                    lastTouchDistance = null;
+                }
+            });
 
-         function drawCoordinateSystem() {
-             canvas.width = window.innerWidth;
-             canvas.height = window.innerHeight;
+            function drawCar(centerX, centerY) {
+                ctx.fillStyle = "white";
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY - 15);
+                ctx.lineTo(centerX - 15, centerY + 15);
+                ctx.lineTo(centerX + 15, centerY + 15);
+                ctx.closePath();
+                ctx.fill();
+            }
 
-             const width = canvas.width;
-             const height = canvas.height;
-             const centerX = width / 2;
-             const centerY = height / 2;
-             const meterToPixel = (height / 10) * scale;
+            function drawTarget(centerX, centerY) {
+                ctx.fillStyle = "#3498db";
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY - 15);
+                ctx.lineTo(centerX - 15, centerY + 15);
+                ctx.lineTo(centerX + 15, centerY + 15);
+                ctx.closePath();
+                ctx.fill();
+            }
 
-             ctx.clearRect(0, 0, width, height);
+            function drawCoordinateSystem() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
 
-             ctx.strokeStyle = "#ecf0f1";
-             ctx.lineWidth = 2;
+                const width = canvas.width;
+                const height = canvas.height;
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const meterToPixel = (height / 10) * scale;
 
-             ctx.beginPath();
-             ctx.moveTo(0, centerY);
-             ctx.lineTo(width, centerY);
-             ctx.stroke();
+                ctx.clearRect(0, 0, width, height);
 
-             ctx.beginPath();
-             ctx.moveTo(centerX, 0);
-             ctx.lineTo(centerX, height);
-             ctx.stroke();
+                ctx.strokeStyle = "#ecf0f1";
+                ctx.lineWidth = 2;
 
-             const baseStep = scale >= 3 ? 0.2 : scale >= 1.5 ? 0.5 : scale >= 0.5 ? 1 : 2;
-             const step = baseStep;
+                ctx.beginPath();
+                ctx.moveTo(0, centerY);
+                ctx.lineTo(width, centerY);
+                ctx.stroke();
 
-             function formatNumber(num) {
-                 return Math.abs(num) < 1e-10 ? "0" : num.toFixed(1).replace(/\.0$/, "");
-             }
+                ctx.beginPath();
+                ctx.moveTo(centerX, 0);
+                ctx.lineTo(centerX, height);
+                ctx.stroke();
 
-             const maxX = Math.ceil(width / (2 * meterToPixel));
-             for (let i = -maxX; i <= maxX; i += step) {
-                 if (Math.abs(i) < 1e-10) continue;
-                 const x = centerX + i * meterToPixel;
-                 const label = formatNumber(i);
-                 ctx.font = "14px Arial";
-                 ctx.fillStyle = "#ecf0f1";
-                 ctx.textAlign = "center";
-                 ctx.fillText(label, x, centerY + 15);
-             }
+                const baseStep = scale >= 3 ? 0.2 : scale >= 1.5 ? 0.5 : scale >= 0.5 ? 1 : 2;
+                const step = baseStep;
 
-             const maxY = Math.ceil(height / (2 * meterToPixel));
-             for (let i = -maxY; i <= maxY; i += step) {
-                 if (Math.abs(i) < 1e-10) continue;
-                 const y = centerY - i * meterToPixel;
-                 const label = formatNumber(i);
-                 ctx.font = "14px Arial";
-                 ctx.fillStyle = "#ecf0f1";
-                 ctx.textAlign = "right";
-                 ctx.fillText(label, centerX - 10, y + 5);
-             }
+                function formatNumber(num) {
+                    return Math.abs(num) < 1e-10 ? "0" : num.toFixed(1).replace(/\.0$/, "");
+                }
 
-             drawCar(centerX, centerY);
+                const maxX = Math.ceil(width / (2 * meterToPixel));
+                for (let i = -maxX; i <= maxX; i += step) {
+                    if (Math.abs(i) < 1e-10) continue;
+                    const x = centerX + i * meterToPixel;
+                    const label = formatNumber(i);
+                    ctx.font = "14px Arial";
+                    ctx.fillStyle = "#ecf0f1";
+                    ctx.textAlign = "center";
+                    ctx.fillText(label, x, centerY + 15);
+                }
 
-             const targetX = centerX + data.x * meterToPixel;
-             const targetY = centerY - data.y * meterToPixel;
-             drawTarget(targetX, targetY);
-         }
+                const maxY = Math.ceil(height / (2 * meterToPixel));
+                for (let i = -maxY; i <= maxY; i += step) {
+                    if (Math.abs(i) < 1e-10) continue;
+                    const y = centerY - i * meterToPixel;
+                    const label = formatNumber(i);
+                    ctx.font = "14px Arial";
+                    ctx.fillStyle = "#ecf0f1";
+                    ctx.textAlign = "right";
+                    ctx.fillText(label, centerX - 10, y + 5);
+                }
 
-         const resetZoomButton = document.getElementById("reset-zoom");
+                drawCar(centerX, centerY);
 
-         resetZoomButton.addEventListener("click", () => {
-             scale = defaultScale;
-             drawCoordinateSystem();
-         });
+                const targetX = centerX + data.x * meterToPixel;
+                const targetY = centerY - data.y * meterToPixel;
+                drawTarget(targetX, targetY);
+            }
 
-         drawCoordinateSystem();
+            const resetZoomButton = document.getElementById("reset-zoom");
 
-         // WebSocket connection and polling logic
-         let ws;
-         const reconnectInterval = 500; // Reconnection interval (ms)
-         const pollInterval = 100; // Polling interval (ms)
+            resetZoomButton.addEventListener("click", () => {
+                scale = defaultScale;
+                drawCoordinateSystem();
+            });
 
-         const steeringValue = document.getElementById("steering-value");
-         const steeringSlider = document.getElementById("steering-slider");
-         const throttleValue = document.getElementById("throttle-value");
-         const throttleSlider = document.getElementById("throttle-slider");
+            drawCoordinateSystem();
 
-         const connectWebSocket = () => {
-             ws = new WebSocket(`ws://${location.host}/ws`);
+            // WebSocket connection and polling logic
+            let ws;
+            const reconnectInterval = 500; // Reconnection interval (ms)
+            const pollInterval = 100; // Polling interval (ms)
 
-             ws.onopen = () => {
-                 console.log("WebSocket connected");
+            const steeringValue = document.getElementById("steering-value");
+            const steeringSlider = document.getElementById("steering-slider");
+            const throttleValue = document.getElementById("throttle-value");
+            const throttleSlider = document.getElementById("throttle-slider");
 
-                 // Start polling server for data every `pollInterval` ms
-                 setInterval(() => {
-                     if (ws.readyState === WebSocket.OPEN) {
-                         ws.send("REQUEST_DATA"); // Send request to server
-                     }
-                 }, pollInterval);
-             };
+            const connectWebSocket = () => {
+                ws = new WebSocket(`ws://${location.host}/ws`);
 
-             ws.onmessage = (event) => {
-                 console.log("Message from server:", event.data);
+                ws.onopen = () => {
+                    console.log("WebSocket connected");
 
-                 // Parse the JSON response and update UI
-                 try {
-                     data = JSON.parse(event.data);
-                     updateSliders();
-                     updateInfoPanel();
-                     updateLocationPanel();
-                     updateSteeringThrottlePanel()
-                 } catch (err) {
-                     console.error("Error parsing message:", err);
-                 }
-             };
+                    // Start polling server for data every `pollInterval` ms
+                    setInterval(() => {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send("REQUEST_DATA"); // Send request to server
+                        }
+                    }, pollInterval);
+                };
 
-             ws.onclose = () => {
-                 console.log("WebSocket disconnected. Attempting to reconnect...");
-                 setTimeout(connectWebSocket, reconnectInterval);
-             };
+                ws.onmessage = (event) => {
+                    console.log("Message from server:", event.data);
 
-             ws.onerror = (error) => {
-                 console.error("WebSocket error:", error);
-                 ws.close(); // Ensure the connection is closed before reconnecting
-             };
-         };
+                    // Parse the JSON response and update UI
+                    try {
+                        data = JSON.parse(event.data);
+                        updateSliders();
+                        updateInfoPanel();
+                        updateLocationPanel();
+                        updateSteeringThrottlePanel();
+                    } catch (err) {
+                        console.error("Error parsing message:", err);
+                    }
+                };
 
-         // Establish initial WebSocket connection
-         connectWebSocket();
+                ws.onclose = () => {
+                    console.log("WebSocket disconnected. Attempting to reconnect...");
+                    setTimeout(connectWebSocket, reconnectInterval);
+                };
 
-         // Function to smoothly reset a slider to the center
-         const resetSlider = (slider, param, duration = 300) => {
-             const startValue = parseInt(slider.value, 10);
-             const targetValue = 1500;
-             const startTime = performance.now();
+                ws.onerror = (error) => {
+                    console.error("WebSocket error:", error);
+                    ws.close(); // Ensure the connection is closed before reconnecting
+                };
+            };
 
-             const animateReset = (currentTime) => {
-                 const elapsed = currentTime - startTime;
-                 const progress = Math.min(elapsed / duration, 1);
-                 const newValue = Math.round(startValue + (targetValue - startValue) * progress);
+            // Establish initial WebSocket connection
+            connectWebSocket();
 
-                 slider.value = newValue;
+            // Function to smoothly reset a slider to the center
+            const resetSlider = (slider, param, duration = 300) => {
+                const startValue = parseInt(slider.value, 10);
+                const targetValue = 1500;
+                const startTime = performance.now();
 
-                 // Send intermediate value
-                 if (ws.readyState === WebSocket.OPEN) {
-                     ws.send(`${param}=${newValue}`);
-                 }
+                const animateReset = (currentTime) => {
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const newValue = Math.round(startValue + (targetValue - startValue) * progress);
 
-                 if (progress < 1) {
-                     requestAnimationFrame(animateReset);
-                 } else {
-                     // Ensure the final value is sent as exactly 1500
-                     slider.value = targetValue;
-                     if (ws.readyState === WebSocket.OPEN) {
-                         ws.send(`${param}=${targetValue}`);
-                     }
-                 }
-             };
+                    slider.value = newValue;
 
-             requestAnimationFrame(animateReset);
-         };
+                    // Send intermediate value
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(`${param}=${newValue}`);
+                    }
 
-         // Event listeners for steering slider
-         steeringSlider.addEventListener("input", () => {
-             if (ws.readyState === WebSocket.OPEN) {
-                 ws.send(`steering=${steeringSlider.value}`);
-             }
-         });
+                    if (progress < 1) {
+                        requestAnimationFrame(animateReset);
+                    } else {
+                        // Ensure the final value is sent as exactly 1500
+                        slider.value = targetValue;
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(`${param}=${targetValue}`);
+                        }
+                    }
+                };
 
-         steeringSlider.addEventListener("mouseup", () => {
-             resetSlider(steeringSlider, "steering");
-         });
+                requestAnimationFrame(animateReset);
+            };
 
-         steeringSlider.addEventListener("touchend", () => {
-             resetSlider(steeringSlider, "steering");
-         });
+            // Event listeners for steering slider
+            steeringSlider.addEventListener("input", () => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(`steering=${steeringSlider.value}`);
+                }
+            });
 
-         // Event listeners for throttle slider
-         throttleSlider.addEventListener("input", () => {
-             if (ws.readyState === WebSocket.OPEN) {
-                 ws.send(`throttle=${throttleSlider.value}`);
-             }
-         });
+            steeringSlider.addEventListener("mouseup", () => {
+                resetSlider(steeringSlider, "steering");
+            });
 
-         throttleSlider.addEventListener("mouseup", () => {
-             resetSlider(throttleSlider, "throttle");
-         });
+            steeringSlider.addEventListener("touchend", () => {
+                resetSlider(steeringSlider, "steering");
+            });
 
-         throttleSlider.addEventListener("touchend", () => {
-             resetSlider(throttleSlider, "throttle");
-         });
+            // Event listeners for throttle slider
+            throttleSlider.addEventListener("input", () => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(`throttle=${throttleSlider.value}`);
+                }
+            });
+
+            throttleSlider.addEventListener("mouseup", () => {
+                resetSlider(throttleSlider, "throttle");
+            });
+
+            throttleSlider.addEventListener("touchend", () => {
+                resetSlider(throttleSlider, "throttle");
+            });
         </script>
     </body>
 </html>
