@@ -31,6 +31,15 @@ const int minSteering = 1000, maxSteering = 2000, midSteering = 1500;
 // Variables to store values
 int throttleValue = midThrottle, steeringValue = midSteering;
 
+// The reported distance from all three UWB anchors to the tag.
+float dA = 0 , dB = 0, dC = 0;
+
+// The calculated coordinates of the tag.
+float currentX = 0, currentY = 0;
+
+// The target coordinates to match.
+float targetX = 0, targetY = 0;
+
 // Heartbeat tracking
 unsigned long lastPingTime = 0;           // Time of last received ping
 const unsigned long heartbeatTimeout = 1000; // 1 second timeout
@@ -122,7 +131,15 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       lastPingTime = millis();
       
       if (message == "REQUEST_DATA") {
-        String response = String("{\"throttle\":") + throttleValue + ",\"steering\":" + steeringValue + "}";
+        String response = "{";
+        response += "\"throttle\":" + String(throttleValue) + ",";
+        response += "\"steering\":" + String(steeringValue) + ",";
+        response += "\"dA\":" + String(dA) + ",";
+        response += "\"dB\":" + String(dB) + ",";
+        response += "\"dC\":" + String(dC) + ",";
+        response += "\"x\":" + String(currentX) + ",";
+        response += "\"y\":" + String(currentY);
+        response += "}";
         client->text(response); // Send data to the requesting client
         //Serial.println("Sent data to client: " + response);
       } else if (message.startsWith("throttle=")) {

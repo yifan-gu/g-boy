@@ -244,7 +244,7 @@ char const* index_html = R"rawliteral(
         </div>
 
         <div class="location-panel" id="location-panel">
-            <span id="location">current (0, 0)</span>
+            <span id="current-location">current (0, 0)</span>
             <span id="target-location">target (0, 0)</span>
             <div class="toggle-container" id="toggle-button">
                 <div class="toggle-knob"></div>
@@ -279,11 +279,9 @@ char const* index_html = R"rawliteral(
          const maxScale = 5;
          const defaultScale = 1;
 
-         const data = {
+         let data = {
              x: 0,
              y: 0,
-             targetX: 2,
-             targetY: 1,
              dA: 0,
              dB: 0,
              dC: 0,
@@ -298,22 +296,25 @@ char const* index_html = R"rawliteral(
          }
 
          function updateLocationPanel() {
-             const locationElement = document.getElementById("location");
+             const currentLocationElement = document.getElementById("current-location");
              const targetLocationElement = document.getElementById("target-location");
 
-             locationElement.textContent = `current (${data.x}, ${data.y})`;
-             targetLocationElement.textContent = `target (${data.targetX}, ${data.targetY})`;
-
-             if (isAutoMode) {
-                 targetLocationElement.style.color = "#3498db";
-             } else {
-                 targetLocationElement.style.color = "white";
+             currentLocationElement.textContent = `current (${data.x}, ${data.y})`;
+             if (!isAutoMode) {
+                 targetLocationElement.textContent = `target (${data.x}, ${data.y})`;
              }
          }
 
          function updateSteeringThrottlePanel() {
-             document.getElementById("steering").textContent = `Steering: ${data.steering}`;
-             document.getElementById("throttle").textContent = `Throttle: ${data.throttle}`;
+             document.getElementById("steering-value").textContent = `Steering: ${data.steering}`;
+             document.getElementById("throttle-value").textContent = `Throttle: ${data.throttle}`;
+         }
+
+         function updateSliders() {
+             if (isAutoMode) {
+                 document.getElementById("steering-slider").value = data.steering;
+                 document.getElementById("throttle-slider").value = data.throttle;
+             }
          }
 
          const toggleButton = document.getElementById("toggle-button");
@@ -325,7 +326,15 @@ char const* index_html = R"rawliteral(
              isAutoMode = !isAutoMode;
              toggleButton.classList.toggle("active");
              modeLabel.textContent = isAutoMode ? "Auto Mode" : "Manual Mode";
-             updateLocationPanel();
+
+             // Snapshot the target location.
+             const targetLocationElement = document.getElementById("target-location");
+             if (isAutoMode) {
+                 targetLocationElement.style.color = "#3498db";
+             } else {
+                 targetLocationElement.style.color = "white";
+             }
+
              // Enable or disable sliders based on mode
              const sliders = document.querySelectorAll("#steering-slider, #throttle-slider");
              sliders.forEach((slider) => {
@@ -446,8 +455,8 @@ char const* index_html = R"rawliteral(
 
              drawCar(centerX, centerY);
 
-             const targetX = centerX + data.targetX * meterToPixel;
-             const targetY = centerY - data.targetY * meterToPixel;
+             const targetX = centerX + data.x * meterToPixel;
+             const targetY = centerY - data.y * meterToPixel;
              drawTarget(targetX, targetY);
          }
 
@@ -489,19 +498,11 @@ char const* index_html = R"rawliteral(
 
                  // Parse the JSON response and update UI
                  try {
-                     const data = JSON.parse(event.data);
-                     if (data.steering !== undefined) {
-                         steeringValue.textContent = "Steering: " + data.steering;
-                         if (isAutoMode) {
-                             steeringSlider.value = data.steering;
-                         }
-                     }
-                     if (data.throttle !== undefined) {
-                         throttleValue.textContent = "Throttle: " + data.throttle;
-                         if (isAutoMode) {
-                             throttleSlider.value = data.throttle;
-                         }
-                     }
+                     data = JSON.parse(event.data);
+                     updateSliders();
+                     updateInfoPanel();
+                     updateLocationPanel();
+                     updateSteeringThrottlePanel()
                  } catch (err) {
                      console.error("Error parsing message:", err);
                  }
