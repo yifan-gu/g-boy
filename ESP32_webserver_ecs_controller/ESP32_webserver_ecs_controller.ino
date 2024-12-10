@@ -13,7 +13,7 @@
 // Access Point credentials
 const char* ssid = "RC_Controller";
 const char* password = "12345678"; // Minimum 8 characters
-const char* hostname = "g-boy"; // mDNS hostname
+const char* hostname = "autocam"; // mDNS hostname
 
 
 // Async WebSocket server
