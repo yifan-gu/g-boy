@@ -32,7 +32,9 @@ const int minSteering = 1000, maxSteering = 2000, midSteering = 1500;
 int throttleValue = midThrottle, steeringValue = midSteering;
 
 // The reported distance from all three UWB anchors to the tag.
-float dA = 0 , dB = 0, dC = 0;
+float dF = 0; // Front sensor.
+float dL = 0; // Left sensor.
+float dR = 0; // Right sensor.
 
 // The calculated coordinates of the tag.
 float currentX = 0, currentY = 0;
@@ -134,9 +136,9 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         String response = "{";
         response += "\"throttle\":" + String(throttleValue) + ",";
         response += "\"steering\":" + String(steeringValue) + ",";
-        response += "\"dA\":" + String(dA) + ",";
-        response += "\"dB\":" + String(dB) + ",";
-        response += "\"dC\":" + String(dC) + ",";
+        response += "\"dF\":" + String(dF) + ",";
+        response += "\"dL\":" + String(dL) + ",";
+        response += "\"dR\":" + String(dR) + ",";
         response += "\"x\":" + String(currentX) + ",";
         response += "\"y\":" + String(currentY);
         response += "}";

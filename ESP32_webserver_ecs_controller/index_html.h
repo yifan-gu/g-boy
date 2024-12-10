@@ -238,9 +238,9 @@ char const* index_html = R"rawliteral(
         <canvas id="coordinate-system"></canvas>
 
         <div class="info-panel" id="info-panel">
-            <span id="da">dA: 0</span>
-            <span id="db">dB: 0</span>
-            <span id="dc">dC: 0</span>
+            <span id="dF">dF: 0</span>
+            <span id="dL">dL: 0</span>
+            <span id="dR">dR: 0</span>
         </div>
 
         <div class="location-panel" id="location-panel">
@@ -282,17 +282,17 @@ char const* index_html = R"rawliteral(
          let data = {
              x: 0,
              y: 0,
-             dA: 0,
-             dB: 0,
-             dC: 0,
+             dF: 0,
+             dL: 0,
+             dR: 0,
              steering: 0,
              throttle: 0,
          };
 
          function updateInfoPanel() {
-             document.getElementById("da").textContent = `dA: ${data.dA}`;
-             document.getElementById("db").textContent = `dB: ${data.dB}`;
-             document.getElementById("dc").textContent = `dC: ${data.dC}`;
+             document.getElementById("dF").textContent = `dF: ${data.dF}`;
+             document.getElementById("dL").textContent = `dL: ${data.dL}`;
+             document.getElementById("dR").textContent = `dR: ${data.dR}`;
          }
 
          function updateLocationPanel() {
