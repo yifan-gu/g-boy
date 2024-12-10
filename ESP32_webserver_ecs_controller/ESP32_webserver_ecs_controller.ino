@@ -28,8 +28,8 @@ Servo steering;
 const int minThrottle = 1000, maxThrottle = 2000, midThrottle = 1500;
 const int minSteering = 1000, maxSteering = 2000, midSteering = 1500;
 
-// Variable to toggle the manual vs auto mode.
-boolean isAutoMode = false;
+// Variable to toggle the free vs lock mode.
+boolean isLockMode = false;
 
 // Variables to store values
 int throttleValue = midThrottle, steeringValue = midSteering;
@@ -148,15 +148,15 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         client->text(response); // Send data to the requesting client
         //Serial.println("Sent data to client: " + response);
       } else if (message.startsWith("mode=")) {
-        if (message == "mode=auto") {
-          isAutoMode = true;
-          Serial.println("Switched to Auto Mode");
-        } else if (message == "mode=manual") {
-          isAutoMode = false;
-          Serial.println("Switched to Manual Mode");
+        if (message == "mode=lock") {
+          isLockMode = true;
+          Serial.println("Switched to Lock Mode");
+        } else if (message == "mode=free") {
+          isLockMode = false;
+          Serial.println("Switched to Free Mode");
         }
       } else if (message.startsWith("x=") && message.indexOf("&y=") > 0) {
-        // Parse coordinates when switching to auto mode
+        // Parse coordinates when switching to lock mode
         int xIndex = message.indexOf("x=") + 2;
         int yIndex = message.indexOf("&y=") + 3;
         targetX = message.substring(xIndex, message.indexOf("&y=")).toFloat();

@@ -249,7 +249,7 @@ char const* index_html = R"rawliteral(
             <div class="toggle-container" id="toggle-button">
                 <div class="toggle-knob"></div>
             </div>
-            <div class="mode-label" id="mode-label">Manual Mode</div>
+            <div class="mode-label" id="mode-label">Free Mode</div>
         </div>
 
         <div class="steering-throttle-panel" id="steering-throttle-panel">
@@ -289,6 +289,8 @@ char const* index_html = R"rawliteral(
                 throttle: 0,
             };
 
+            let isLockMode = false;
+
             function updateInfoPanel() {
                 document.getElementById("dF").textContent = `dF: ${data.dF}`;
                 document.getElementById("dL").textContent = `dL: ${data.dL}`;
@@ -300,7 +302,7 @@ char const* index_html = R"rawliteral(
                 const targetLocationElement = document.getElementById("target-location");
 
                 currentLocationElement.textContent = `current (${data.x}, ${data.y})`;
-                if (!isAutoMode) {
+                if (!isLockMode) {
                     targetLocationElement.textContent = `target (${data.x}, ${data.y})`;
                 }
             }
@@ -311,7 +313,7 @@ char const* index_html = R"rawliteral(
             }
 
             function updateSliders() {
-                if (isAutoMode) {
+                if (isLockMode) {
                     document.getElementById("steering-slider").value = data.steering;
                     document.getElementById("throttle-slider").value = data.throttle;
                 }
@@ -320,19 +322,17 @@ char const* index_html = R"rawliteral(
             const toggleButton = document.getElementById("toggle-button");
             const modeLabel = document.getElementById("mode-label");
 
-            let isAutoMode = false;
-
             toggleButton.addEventListener("click", () => {
-                isAutoMode = !isAutoMode;
+                isLockMode = !isLockMode;
                 toggleButton.classList.toggle("active");
-                modeLabel.textContent = isAutoMode ? "Auto Mode" : "Manual Mode";
+                modeLabel.textContent = isLockMode ? "Lock Mode" : "Free Mode";
 
                 // Send mode and coordinates to the server
                 if (ws.readyState === WebSocket.OPEN) {
-                    const modeMessage = isAutoMode ? "mode=auto" : "mode=manual";
+                    const modeMessage = isLockMode ? "mode=lock" : "mode=free";
                     ws.send(modeMessage);
 
-                    if (isAutoMode) {
+                    if (isLockMode) {
                         // Send current x and y as target coordinates
                         const coordinatesMessage = `x=${data.x}&y=${data.y}`;
                         ws.send(coordinatesMessage);
@@ -341,12 +341,12 @@ char const* index_html = R"rawliteral(
 
                 // Update UI
                 const targetLocationElement = document.getElementById("target-location");
-                targetLocationElement.style.color = isAutoMode ? "#3498db" : "white";
+                targetLocationElement.style.color = isLockMode ? "#3498db" : "white";
 
                 // Enable or disable sliders based on mode
                 const sliders = document.querySelectorAll("#steering-slider, #throttle-slider");
                 sliders.forEach((slider) => {
-                    slider.disabled = isAutoMode; // Disable input when auto mode is on
+                    slider.disabled = isLockMode; // Disable input when lock mode is on
                 });
             });
 
