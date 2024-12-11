@@ -51,12 +51,23 @@ void setup() {
 void loop()
 {
   DW1000Ranging.loop();
+  runWebClientLoop();
+}
 
+void runWebClientLoop() {
   // Keep WebSocket client alive
   wsClient.poll();
 
   static unsigned long lastSendTime = 0;
+  static unsigned long lastReconnectAttempt = 0;
   unsigned long currentTime = millis();
+
+  // Check WebSocket connection and attempt reconnection if disconnected
+  if (!wsClient.available() && currentTime - lastReconnectAttempt >= 1000) {
+    Serial.println("WebSocket disconnected, attempting to reconnect...");
+    setupWebClient();
+    lastReconnectAttempt = currentTime;
+  }
 
   // Send data every 5 seconds
   if (wsClient.available() && currentTime - lastSendTime >= 1000) {
@@ -103,17 +114,36 @@ void setupWebClient() {
 }
 
 void sendSensorData() {
-  // Simulate sensor data
-  float dF = random(10, 100) / 10.0;
-  float dL = random(10, 100) / 10.0;
-  float dR = random(10, 100) / 10.0;
+  static float angle = 0.0; // Current angle in radians
+  const float radius = 3.0; // Radius of the circle in meters
+  const float step = 0.1;   // Angle increment per step in radians (controls speed)
+
+  // Calculate current target position
+  float targetX = radius * cos(angle);
+  float targetY = radius * sin(angle);
+
+  // Sensor positions
+  const float xF = 0, yF = 1;  // Forward sensor
+  const float xL = -1, yL = 0; // Left sensor
+  const float xR = 1, yR = 0;  // Right sensor
+
+  // Calculate distances to the target for each sensor
+  float dF = sqrt(pow(targetX - xF, 2) + pow(targetY - yF, 2));
+  float dL = sqrt(pow(targetX - xL, 2) + pow(targetY - yL, 2));
+  float dR = sqrt(pow(targetX - xR, 2) + pow(targetY - yR, 2));
 
   // Create JSON message
-  String message = "dF=" + String(dF) + "&dL=" + String(dL) + "&dR=" + String(dR);
+  String message = "dF=" + String(dF, 2) + "&dL=" + String(dL, 2) + "&dR=" + String(dR, 2);
 
   // Send the message
   wsClient.send(message);
   Serial.println("Sent: " + message);
+
+  // Increment angle for the next step
+  angle += step;
+  if (angle >= 2 * PI) {
+    angle -= 2 * PI; // Wrap angle to stay within 0 to 2π
+  }
 }
 
 void onMessageCallback(WebsocketsMessage message) {

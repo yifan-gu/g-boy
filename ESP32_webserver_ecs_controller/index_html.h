@@ -283,6 +283,8 @@ char const* index_html = R"rawliteral(
             const maxScale = 5;
             const defaultScale = 1;
 
+            const midSliderValue = 1500;
+
             let data = {
                 currentX: 0,
                 currentY: 0,
@@ -310,7 +312,7 @@ char const* index_html = R"rawliteral(
                 currentLocationElement.textContent = `current (${data.currentX}, ${data.currentY})`;
 
                 if (!isLockMode) {
-                    targetLocationElement.textContent = `target (${data.currentY}, ${data.currentY})`;
+                    targetLocationElement.textContent = `target (${data.currentX}, ${data.currentY})`;
                 }
                 targetLocationElement.style.color = isLockMode ? "#7f8c8d" : "white";
             }
@@ -344,6 +346,10 @@ char const* index_html = R"rawliteral(
                         // Send current x and y as target coordinates
                         const coordinatesMessage = `x=${data.currentX}&y=${data.currentY}`;
                         ws.send(coordinatesMessage);
+                    } else {
+                        // Reset the slider.
+                        steeringSlider.value = midSliderValue;
+                        throttleSlider.value = midSliderValue;
                     }
                 }
 
@@ -552,7 +558,7 @@ char const* index_html = R"rawliteral(
             // Function to smoothly reset a slider to the center
             const resetSlider = (slider, param, duration = 300) => {
                 const startValue = parseInt(slider.value, 10);
-                const targetValue = 1500;
+                const targetValue = midSliderValue;
                 const startTime = performance.now();
 
                 const animateReset = (currentTime) => {
@@ -570,7 +576,7 @@ char const* index_html = R"rawliteral(
                     if (progress < 1) {
                         requestAnimationFrame(animateReset);
                     } else {
-                        // Ensure the final value is sent as exactly 1500
+                        // Ensure the final value is sent as exactly in the middle.
                         slider.value = targetValue;
                         if (ws.readyState === WebSocket.OPEN) {
                             ws.send(`${param}=${targetValue}`);

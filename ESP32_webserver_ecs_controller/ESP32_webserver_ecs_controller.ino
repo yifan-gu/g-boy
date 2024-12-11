@@ -77,6 +77,7 @@ void setup() {
 }
 
 void loop() {
+  calculateCoordinates();
   calculateSteeringThrottle();
   runESCController();
   runClientHealthCheck();
@@ -146,7 +147,7 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 
     case WS_EVT_DATA: {
       String message = String((char*)data).substring(0, len);
-      Serial.println("Message received: " + message);
+      //Serial.println("Message received: " + message);
       lastPingTime = millis();
 
       if (message == "REQUEST_DATA") {
@@ -169,6 +170,8 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
           Serial.println("Switched to Lock Mode");
         } else if (message == "mode=free") {
           isLockMode = false;
+          throttleValue = midThrottle;
+          steeringValue = midSteering;
           Serial.println("Switched to Free Mode");
         }
       } else if (message.startsWith("dF=")) {
@@ -226,8 +229,6 @@ void calculateSteeringThrottle() {
     return;
   }
 
-  calculateTargetCoordinates();
-
   if ((targetY > 0) && (currentX - targetX > delta) || (targetY < 0) && (targetX - currentX > delta)) {
     // The tag is moving towards front right, or rear left.
     steeringRight();
@@ -244,7 +245,7 @@ void calculateSteeringThrottle() {
   }
 }
 
-void calculateTargetCoordinates() {
+void calculateCoordinates() {
   // Coefficients for the linear equations
   float vA1 = 2 * (xL - xF);
   float vB1 = 2 * (yL - yF);
@@ -265,6 +266,9 @@ void calculateTargetCoordinates() {
     currentX = (vC1 * vB2 - vC2 * vB1) / determinant;
     currentY = (vA1 * vC2 - vA2 * vC1) / determinant;
   }
+
+  // Serial.print("current x, current y:");
+  // Serial.println(String(currentX) + ", " + String(currentY));
 
   if (!isLockMode) { // Update the target coordinates as well if it's not in lock mode to prevent large variation when the lock mode is turned on.
     targetX = currentX;
