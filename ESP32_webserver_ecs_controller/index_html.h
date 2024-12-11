@@ -85,6 +85,10 @@ char const* index_html = R"rawliteral(
                 display: block;
             }
 
+            #current-location {
+                color: #3498db;
+            }
+
             .toggle-container {
                 align-self: flex-end;
                 width: 60px;
@@ -280,8 +284,10 @@ char const* index_html = R"rawliteral(
             const defaultScale = 1;
 
             let data = {
-                x: 0,
-                y: 0,
+                currentX: 0,
+                currentY: 0,
+                targetX: 0,
+                targetY: 0,
                 dF: 0,
                 dL: 0,
                 dR: 0,
@@ -301,10 +307,12 @@ char const* index_html = R"rawliteral(
                 const currentLocationElement = document.getElementById("current-location");
                 const targetLocationElement = document.getElementById("target-location");
 
-                currentLocationElement.textContent = `current (${data.x}, ${data.y})`;
+                currentLocationElement.textContent = `current (${data.currentX}, ${data.currentY})`;
+
                 if (!isLockMode) {
-                    targetLocationElement.textContent = `target (${data.x}, ${data.y})`;
+                    targetLocationElement.textContent = `target (${data.currentY}, ${data.currentY})`;
                 }
+                targetLocationElement.style.color = isLockMode ? "#7f8c8d" : "white";
             }
 
             function updateSteeringThrottlePanel() {
@@ -334,14 +342,16 @@ char const* index_html = R"rawliteral(
 
                     if (isLockMode) {
                         // Send current x and y as target coordinates
-                        const coordinatesMessage = `x=${data.x}&y=${data.y}`;
+                        const coordinatesMessage = `x=${data.currentX}&y=${data.currentY}`;
                         ws.send(coordinatesMessage);
                     }
                 }
 
                 // Update UI
                 const targetLocationElement = document.getElementById("target-location");
-                targetLocationElement.style.color = isLockMode ? "#3498db" : "white";
+                targetLocationElement.style.color = isLockMode ? "#7f8c8d" : "white";
+
+                drawCoordinateSystem();
 
                 // Enable or disable sliders based on mode
                 const sliders = document.querySelectorAll("#steering-slider, #throttle-slider");
@@ -387,22 +397,24 @@ char const* index_html = R"rawliteral(
                 }
             });
 
-            function drawCar(centerX, centerY) {
-                ctx.fillStyle = "white";
-                ctx.beginPath();
-                ctx.moveTo(centerX, centerY - 15);
-                ctx.lineTo(centerX - 15, centerY + 15);
-                ctx.lineTo(centerX + 15, centerY + 15);
-                ctx.closePath();
-                ctx.fill();
+            function drawCar(x, y) {
+                drawTriangle(x, y, "white");
             }
 
-            function drawTarget(centerX, centerY) {
-                ctx.fillStyle = "#3498db";
+            function drawTarget(x, y) {
+                drawTriangle(x, y, "#7f8c8d");
+            }
+
+            function drawCurrent(x, y) {
+                drawTriangle(x, y, "#3498db");
+            }
+
+            function drawTriangle(x, y, color) {
+                ctx.fillStyle = color;
                 ctx.beginPath();
-                ctx.moveTo(centerX, centerY - 15);
-                ctx.lineTo(centerX - 15, centerY + 15);
-                ctx.lineTo(centerX + 15, centerY + 15);
+                ctx.moveTo(x, y - 15);
+                ctx.lineTo(x - 15, y + 15);
+                ctx.lineTo(x + 15, y + 15);
                 ctx.closePath();
                 ctx.fill();
             }
@@ -461,11 +473,17 @@ char const* index_html = R"rawliteral(
                     ctx.fillText(label, centerX - 10, y + 5);
                 }
 
-                drawCar(centerX, centerY);
+                if (isLockMode) {
+                    const targetX = centerX + data.targetX * meterToPixel;
+                    const targetY = centerY - data.targetY * meterToPixel;
+                    drawTarget(targetX, targetY);
+                }
 
-                const targetX = centerX + data.x * meterToPixel;
-                const targetY = centerY - data.y * meterToPixel;
-                drawTarget(targetX, targetY);
+                const currentX = centerX + data.currentX * meterToPixel;
+                const currentY = centerY - data.currentY * meterToPixel;
+                drawCurrent(currentX, currentY);
+
+                drawCar(centerX, centerY);
             }
 
             const resetZoomButton = document.getElementById("reset-zoom");
@@ -511,6 +529,7 @@ char const* index_html = R"rawliteral(
                         updateInfoPanel();
                         updateLocationPanel();
                         updateSteeringThrottlePanel();
+                        drawCoordinateSystem();
                     } catch (err) {
                         console.error("Error parsing message:", err);
                     }
