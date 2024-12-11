@@ -3,11 +3,13 @@
 // this tag will be used for calibrating the anchors.
 
 #include <WiFi.h>
-#include <WebSocketsClient.h>
+#include <ArduinoWebsockets.h>
 #include <SPI.h>
 
 #include "DW1000Ranging.h"
 #include "DW1000.h"
+
+using namespace websockets;
 
 #define SPI_SCK 18
 #define SPI_MISO 19
@@ -28,10 +30,9 @@ const char* ssid = "RC-Controller";
 const char* password = "12345678";
 
 // Replace with your server's address and port
-const char* serverAddress = "autocam.local"; // e.g., "192.168.1.100"
-const uint16_t serverPort = 80;
+const char* serverAddress = "ws://autocam.local:80/ws";
 
-WebSocketsClient webSocket;
+WebsocketsClient wsClient;
 
 void setup() {
   // Start Serial for debugging
@@ -50,16 +51,19 @@ void setup() {
 void loop()
 {
   DW1000Ranging.loop();
-  webSocket.loop();
+
+  // Keep WebSocket client alive
+  wsClient.poll();
 
   static unsigned long lastSendTime = 0;
   unsigned long currentTime = millis();
 
   // Send data every 5 seconds
-  if (currentTime - lastSendTime >= 5000) {
+  if (wsClient.available() && currentTime - lastSendTime >= 1000) {
     sendSensorData();
     lastSendTime = currentTime;
   }
+
 }
 
 void setupUWBTag() {
@@ -86,9 +90,16 @@ void setupWebClient() {
   Serial.println("\nWiFi connected!");
   Serial.printf("IP Address: %s\n", WiFi.localIP().toString().c_str());
 
-  // Connect to WebSocket server
-  webSocket.begin(serverAddress, serverPort, "/");
-  webSocket.onEvent(webSocketEvent);
+  // Configure WebSocket client
+  wsClient.onMessage(onMessageCallback);
+  wsClient.onEvent(onEventsCallback);
+
+  // Connect to the WebSocket server
+  if (wsClient.connect(serverAddress)) {
+    Serial.println("WebSocket connected!");
+  } else {
+    Serial.println("WebSocket connection failed!");
+  }
 }
 
 void sendSensorData() {
@@ -100,24 +111,26 @@ void sendSensorData() {
   // Create JSON message
   String message = "dF=" + String(dF) + "&dL=" + String(dL) + "&dR=" + String(dR);
 
-  // Send the message to the server
-  webSocket.sendTXT(message);
+  // Send the message
+  wsClient.send(message);
   Serial.println("Sent: " + message);
 }
 
-void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
-  switch (type) {
-    case WStype_DISCONNECTED:
-      Serial.println("[WebSocket] Disconnected");
-      break;
-    case WStype_CONNECTED:
-      Serial.println("[WebSocket] Connected");
-      break;
-    case WStype_TEXT:
-      Serial.printf("[WebSocket] Received: %s\n", payload);
-      break;
-    default:
-      break;
+void onMessageCallback(WebsocketsMessage message) {
+  // Handle incoming messages from the server
+  Serial.printf("Received: %s\n", message.data().c_str());
+}
+
+void onEventsCallback(WebsocketsEvent event, String data) {
+  // Handle WebSocket events
+  if (event == WebsocketsEvent::ConnectionOpened) {
+    Serial.println("WebSocket connection opened!");
+  } else if (event == WebsocketsEvent::ConnectionClosed) {
+    Serial.println("WebSocket connection closed!");
+  } else if (event == WebsocketsEvent::GotPing) {
+    Serial.println("Ping received!");
+  } else if (event == WebsocketsEvent::GotPong) {
+    Serial.println("Pong received!");
   }
 }
 
