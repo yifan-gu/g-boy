@@ -11,7 +11,7 @@
 #define THROTTLE_PIN 3  // GPIO3 for throttle
 
 // Access Point credentials
-const char* ssid = "RC_Controller";
+const char* ssid = "RC-Controller";
 const char* password = "12345678"; // Minimum 8 characters
 const char* hostname = "autocam"; // mDNS hostname
 
