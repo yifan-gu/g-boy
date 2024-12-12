@@ -242,9 +242,9 @@ char const* index_html = R"rawliteral(
         <canvas id="coordinate-system"></canvas>
 
         <div class="info-panel" id="info-panel">
-            <span id="dF">dF: 0</span>
-            <span id="dL">dL: 0</span>
-            <span id="dR">dR: 0</span>
+            <span id="dis">dis: 0</span>
+            <span id="oT">oT: 0</span>
+            <span id="oC">oC: 0</span>
         </div>
 
         <div class="location-panel" id="location-panel">
@@ -290,9 +290,9 @@ char const* index_html = R"rawliteral(
                 currentY: 0,
                 targetX: 0,
                 targetY: 0,
-                dF: 0,
-                dL: 0,
-                dR: 0,
+                distance: 0,
+                orientationTarget: 0,
+                orientationCar: 0,
                 steering: 0,
                 throttle: 0,
             };
@@ -300,9 +300,9 @@ char const* index_html = R"rawliteral(
             let isLockMode = false;
 
             function updateInfoPanel() {
-                document.getElementById("dF").textContent = `dF: ${data.dF}`;
-                document.getElementById("dL").textContent = `dL: ${data.dL}`;
-                document.getElementById("dR").textContent = `dR: ${data.dR}`;
+                document.getElementById("dis").textContent = `dis: ${data.distance}`;
+                document.getElementById("oT").textContent = `oT: ${data.orientationTarget}`;
+                document.getElementById("oC").textContent = `oC: ${data.orientationCar}`;
             }
 
             function updateLocationPanel() {

@@ -35,15 +35,10 @@ boolean isLockMode = false;
 // Variables to store values
 int throttleValue = midThrottle, steeringValue = midSteering;
 
-// The reported distance from all three UWB anchors to the tag.
-float dF = 0; // Distance of the tag to the front anchor.
-float dL = 0; // Distance of the tag to the left anchor.
-float dR = 0; // Distance of the tag to the right anchor.
-
-// The coordinates of the anchor.
-const float xF = 0, yF = 1;
-const float xL = -1, yL = 0;
-const float xR = 1, yR = 0;
+// The reported distances and angle.
+float distance = 0; // Distance of the tag to the front anchor.
+float orientationTarget = 0; // [0, 360)
+float orientationCar = 0; // [0, 360)
 
 const float delta = 0.5; // Allowed measurement error delta.
 
@@ -148,44 +143,35 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 
     case WS_EVT_DATA: {
       String message = String((char*)data).substring(0, len);
-      //Serial.println("Message received: " + message);
       lastPingTime = millis();
 
       if (message == "REQUEST_DATA") {
         String response = "{";
         response += "\"throttle\":" + String(throttleValue) + ",";
         response += "\"steering\":" + String(steeringValue) + ",";
-        response += "\"dF\":" + String(dF) + ",";
-        response += "\"dL\":" + String(dL) + ",";
-        response += "\"dR\":" + String(dR) + ",";
+        response += "\"distance\":" + String(distance) + ",";
+        response += "\"orientationTarget\":" + String(orientationTarget) + ",";
+        response += "\"orientationCar\":" + String(orientationCar) + ",";
         response += "\"currentX\":" + String(currentX) + ",";
         response += "\"currentY\":" + String(currentY) + ",";
         response += "\"targetX\":" + String(targetX) + ",";
         response += "\"targetY\":" + String(targetY);
         response += "}";
         client->text(response); // Send data to the requesting client
-        // Serial.println("Sent data to client: " + response);
       } else if (message.startsWith("mode=")) {
         if (message == "mode=lock") {
           isLockMode = true;
-          Serial.println("Switched to Lock Mode");
         } else if (message == "mode=free") {
           isLockMode = false;
           throttleValue = midThrottle;
           steeringValue = midSteering;
-          Serial.println("Switched to Free Mode");
         }
-      } else if (message.startsWith("dF=")) {
-        // Parse the combined dF, dL, dR message
-        int dFIndex = message.indexOf("dF=") + 3;
-        int dLIndex = message.indexOf("&dL=") + 4;
-        int dRIndex = message.indexOf("&dR=") + 4;
-
-        if (dFIndex != -1 && dLIndex != -1 && dRIndex != -1) {
-          dF = message.substring(dFIndex, message.indexOf("&dL=")).toFloat();
-          dL = message.substring(dLIndex, message.indexOf("&dR=")).toFloat();
-          dR = message.substring(dRIndex).toFloat();
-        }
+      } else if (message.startsWith("distance=")) {
+        distance = message.substring(9).toFloat();
+      } else if (message.startsWith("orientationTarget=")) {
+        orientationTarget = message.substring(18).toFloat();
+      } else if (message.startsWith("orientationCar=")) {
+        orientationCar = message.substring(15).toFloat();
       } else if (message.startsWith("throttle=")) {
         throttleValue = map(message.substring(9).toInt(), 1000, 2000, minThrottle, maxThrottle);
       } else if (message.startsWith("steering=")) {
@@ -253,34 +239,28 @@ float calculateDistance(float X, float Y) {
 }
 
 void calculateCoordinates() {
-  // Coefficients for the linear equations
-  float vA1 = 2 * (xL - xF);
-  float vB1 = 2 * (yL - yF);
-  float vC1 = dF * dF - dL * dL - xF * xF + xL * xL - yF * yF + yL * yL;
+  // Calculate the relative angle in radians
+  float relativeAngle = radians(orientationTarget - orientationCar);
 
-  float vA2 = 2 * (xR - xF);
-  float vB2 = 2 * (yR - yF);
-  float vC2 = dF * dF - dR * dR - xF * xF + xR * xR - yF * yF + yR * yR;
+  // Use trigonometry to calculate the coordinates
+  currentX = distance * cos(relativeAngle);
+  currentY = distance * sin(relativeAngle);
 
-  // Solve for x and y using the determinant method
-  float determinant = vA1 * vB2 - vA2 * vB1;
+  // Serial output for debugging
+  //Serial.print("Calculated coordinates (currentX, currentY): ");
+  //Serial.print(currentX);
+  //Serial.print(", ");
+  //Serial.println(currentY)
 
-  if (fabs(determinant) < 1e-6) { // Check for near-zero determinant (sensors might be collinear)
-    Serial.println("Error: Sensors are collinear or input is invalid.");
-    currentX = 0;
-    currentY = 0;
-  } else {
-    currentX = (vC1 * vB2 - vC2 * vB1) / determinant;
-    currentY = (vA1 * vC2 - vA2 * vC1) / determinant;
-  }
-
-  // Serial.print("current x, current y:");
-  // Serial.println(String(currentX) + ", " + String(currentY));
-
-  if (!isLockMode) { // Update the target coordinates as well if it's not in lock mode to prevent large variation when the lock mode is turned on.
+  if (!isLockMode) { // Update the target coordinates if not in lock mode
     targetX = currentX;
     targetY = currentY;
+    //Serial.print("Updated target coordinates (targetX, targetY): ");
+    //Serial.print(targetX);
+    //Serial.print(", ");
+    //Serial.println(targetY);
   }
+
   return;
 }
 
