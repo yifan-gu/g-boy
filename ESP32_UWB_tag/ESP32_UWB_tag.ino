@@ -71,7 +71,7 @@ void runWebClientLoop() {
 
   // Send data every 5 seconds
   if (wsClient.available() && currentTime - lastSendTime >= 1000) {
-    sendSensorData();
+    sendSensorDataSquare();
     lastSendTime = currentTime;
   }
 
@@ -113,7 +113,7 @@ void setupWebClient() {
   }
 }
 
-void sendSensorData() {
+void sendSensorDataCircular() {
   static float angle = 0.0; // Current angle in radians
   const float radius = 3.0; // Radius of the circle in meters
   const float step = 0.1;   // Angle increment per step in radians (controls speed)
@@ -143,6 +143,55 @@ void sendSensorData() {
   angle += step;
   if (angle >= 2 * PI) {
     angle -= 2 * PI; // Wrap angle to stay within 0 to 2π
+  }
+}
+
+void sendSensorDataSquare() {
+  static int corner = 0; // Current corner of the square
+  static float t = 0.0;  // Interpolation factor between corners
+  const float step = 0.1; // Increment per step (controls speed)
+
+  // Square corner positions
+  const float squareSize = 3.0; // Half the side length of the square (radius equivalent)
+  const float corners[4][2] = {
+      { squareSize, squareSize },  // Top-right corner
+      { -squareSize, squareSize }, // Top-left corner
+      { -squareSize, -squareSize }, // Bottom-left corner
+      { squareSize, -squareSize }   // Bottom-right corner
+  };
+
+  // Current and next corners
+  float currentCornerX = corners[corner][0];
+  float currentCornerY = corners[corner][1];
+  float nextCornerX = corners[(corner + 1) % 4][0];
+  float nextCornerY = corners[(corner + 1) % 4][1];
+
+  // Interpolate position between current and next corner
+  float targetX = currentCornerX + t * (nextCornerX - currentCornerX);
+  float targetY = currentCornerY + t * (nextCornerY - currentCornerY);
+
+  // Sensor positions
+  const float xF = 0, yF = 1;  // Forward sensor
+  const float xL = -1, yL = 0; // Left sensor
+  const float xR = 1, yR = 0;  // Right sensor
+
+  // Calculate distances to the target for each sensor
+  float dF = sqrt(pow(targetX - xF, 2) + pow(targetY - yF, 2));
+  float dL = sqrt(pow(targetX - xL, 2) + pow(targetY - yL, 2));
+  float dR = sqrt(pow(targetX - xR, 2) + pow(targetY - yR, 2));
+
+  // Create JSON message
+  String message = "dF=" + String(dF, 2) + "&dL=" + String(dL, 2) + "&dR=" + String(dR, 2);
+
+  // Send the message
+  wsClient.send(message);
+  Serial.println("Sent: " + message);
+
+  // Increment interpolation factor
+  t += step;
+  if (t >= 1.0) {
+    t = 0.0; // Reset interpolation factor
+    corner = (corner + 1) % 4; // Move to the next corner
   }
 }
 

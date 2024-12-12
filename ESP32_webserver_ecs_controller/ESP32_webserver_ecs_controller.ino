@@ -2,6 +2,7 @@
 #include <ESPAsyncWebServer.h>
 #include <ESP32Servo.h>
 #include <ESPmDNS.h>
+#include <math.h>
 
 #include "index_html.h"
 
@@ -229,20 +230,26 @@ void calculateSteeringThrottle() {
     return;
   }
 
-  if ((targetY > 0) && (currentX - targetX > delta) || (targetY < 0) && (targetX - currentX > delta)) {
-    // The tag is moving towards front right, or rear left.
-    steeringRight();
-  } else if ((targetY > 0) && (targetX - currentX > delta) || (targetY < 0) && (currentX - targetX > delta)) {
-    // The tag is moving towards front left, or rear right.
-    steeringLeft();
+  if (calculateDistance(currentX, currentY) - calculateDistance(targetX, targetY) <= delta) {
+    return;
   }
 
   if (currentY - targetY > delta) {
-    // Move forward.
-    moveForward();
+    setMoveForward();
   } else if (targetY - currentY > delta) {
-    moveBackward();
+    setMoveBackward();
   }
+
+  if (currentX - targetX > delta) {
+    setSteeringRight();
+  } else if (targetX - currentX > delta) {
+    setSteeringLeft();
+  }
+}
+
+float calculateDistance(float X, float Y) {
+  // Euclidean distance formula
+  return sqrt(pow(X, 2) + pow(Y, 2));
 }
 
 void calculateCoordinates() {
@@ -277,20 +284,18 @@ void calculateCoordinates() {
   return;
 }
 
-void steeringLeft() {
+void setSteeringLeft() {
   steeringValue = midSteering + steeringChangeValue;
-  throttleValue = midThrottle + steeringThrottleChangeValue;
 }
 
-void steeringRight() {
+void setSteeringRight() {
   steeringValue = midSteering - steeringChangeValue;
-  throttleValue = midThrottle + steeringThrottleChangeValue;
 }
 
-void moveForward() {
+void setMoveForward() {
   throttleValue = midThrottle + moveThrottle;
 }
 
-void moveBackward() {
+void setMoveBackward() {
   throttleValue = midThrottle - moveThrottle;
 }
