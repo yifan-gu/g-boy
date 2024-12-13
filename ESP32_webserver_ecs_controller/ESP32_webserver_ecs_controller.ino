@@ -41,9 +41,9 @@ float dL = 0; // Distance of the tag to the left anchor.
 float dR = 0; // Distance of the tag to the right anchor.
 
 // The coordinates of the anchor.
-const float xF = 0, yF = 1;
-const float xL = -1, yL = 0;
-const float xR = 1, yR = 0;
+const float xF = 0, yF = 0.5;
+const float xL = -0.5, yL = 0;
+const float xR = 0.5, yR = 0;
 
 const float delta = 0.5; // Allowed measurement error delta.
 

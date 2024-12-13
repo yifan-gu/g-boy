@@ -504,7 +504,7 @@ char const* index_html = R"rawliteral(
             // WebSocket connection and polling logic
             let ws;
             const reconnectInterval = 500; // Reconnection interval (ms)
-            const pollInterval = 100; // Polling interval (ms)
+            const pollInterval = 10; // Polling interval (ms)
 
             const steeringValue = document.getElementById("steering-value");
             const steeringSlider = document.getElementById("steering-slider");

@@ -34,6 +34,10 @@ const char* serverAddress = "ws://autocam.local:80/ws";
 
 WebsocketsClient wsClient;
 
+float dF = 0;
+float dL = 0;
+float dR = 0;
+
 void setup() {
   // Start Serial for debugging
   unsigned long startTime = millis();
@@ -70,8 +74,8 @@ void runWebClientLoop() {
   }
 
   // Send data every 5 seconds
-  if (wsClient.available() && currentTime - lastSendTime >= 1000) {
-    sendSensorDataSquare();
+  if (wsClient.available() && currentTime - lastSendTime >= 100) {
+    sendSensorData();
     lastSendTime = currentTime;
   }
 
@@ -113,6 +117,13 @@ void setupWebClient() {
   }
 }
 
+void sendSensorData() {
+  String message = "dF=" + String(dF, 2) + "&dL=" + String(dL, 2) + "&dR=" + String(dR, 2);
+  // Send the message
+  wsClient.send(message);
+  Serial.println("Sent: " + message);
+}
+
 void sendSensorDataCircular() {
   static float angle = 0.0; // Current angle in radians
   const float radius = 3.0; // Radius of the circle in meters
@@ -128,9 +139,9 @@ void sendSensorDataCircular() {
   const float xR = 1, yR = 0;  // Right sensor
 
   // Calculate distances to the target for each sensor
-  float dF = sqrt(pow(targetX - xF, 2) + pow(targetY - yF, 2));
-  float dL = sqrt(pow(targetX - xL, 2) + pow(targetY - yL, 2));
-  float dR = sqrt(pow(targetX - xR, 2) + pow(targetY - yR, 2));
+  dF = sqrt(pow(targetX - xF, 2) + pow(targetY - yF, 2));
+  dL = sqrt(pow(targetX - xL, 2) + pow(targetY - yL, 2));
+  dR = sqrt(pow(targetX - xR, 2) + pow(targetY - yR, 2));
 
   // Create JSON message
   String message = "dF=" + String(dF, 2) + "&dL=" + String(dL, 2) + "&dR=" + String(dR, 2);
@@ -149,10 +160,10 @@ void sendSensorDataCircular() {
 void sendSensorDataSquare() {
   static int corner = 0; // Current corner of the square
   static float t = 0.0;  // Interpolation factor between corners
-  const float step = 0.1; // Increment per step (controls speed)
+  const float step = 0.01; // Increment per step (controls speed)
 
   // Square corner positions
-  const float squareSize = 3.0; // Half the side length of the square (radius equivalent)
+  const float squareSize = 5.0; // Half the side length of the square (radius equivalent)
   const float corners[4][2] = {
       { squareSize, squareSize },  // Top-right corner
       { -squareSize, squareSize }, // Top-left corner
@@ -176,9 +187,9 @@ void sendSensorDataSquare() {
   const float xR = 1, yR = 0;  // Right sensor
 
   // Calculate distances to the target for each sensor
-  float dF = sqrt(pow(targetX - xF, 2) + pow(targetY - yF, 2));
-  float dL = sqrt(pow(targetX - xL, 2) + pow(targetY - yL, 2));
-  float dR = sqrt(pow(targetX - xR, 2) + pow(targetY - yR, 2));
+  dF = sqrt(pow(targetX - xF, 2) + pow(targetY - yF, 2));
+  dL = sqrt(pow(targetX - xL, 2) + pow(targetY - yL, 2));
+  dR = sqrt(pow(targetX - xR, 2) + pow(targetY - yR, 2));
 
   // Create JSON message
   String message = "dF=" + String(dF, 2) + "&dL=" + String(dL, 2) + "&dR=" + String(dR, 2);
@@ -214,7 +225,22 @@ void onEventsCallback(WebsocketsEvent event, String data) {
 }
 
 void newRange() {
-  Serial.print(DW1000Ranging.getDistantDevice()->getShortAddress(), HEX);
+  DW1000Device *device = DW1000Ranging.getDistantDevice();
+  int addr = device->getShortAddress();
+  Serial.print(addr, HEX);
+  switch (addr) {
+    case 0x81:
+      dF = device->getRange();
+      break;
+
+    case 0x82:
+      dL = device->getRange();
+      break;
+
+    case 0x83:
+      dR = device->getRange();
+      break;
+  }
   Serial.print(",");
   Serial.println(DW1000Ranging.getDistantDevice()->getRange());
 }
