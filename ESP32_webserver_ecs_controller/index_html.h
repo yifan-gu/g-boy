@@ -242,9 +242,9 @@ char const* index_html = R"rawliteral(
         <canvas id="coordinate-system"></canvas>
 
         <div class="info-panel" id="info-panel">
-            <span id="dis">dis: 0</span>
-            <span id="oT">oT: 0</span>
-            <span id="oC">oC: 0</span>
+            <span id="dist">dist: 0</span>
+            <span id="camHead">cam: 0</span>
+            <span id="carHead">car: 0</span>
         </div>
 
         <div class="location-panel" id="location-panel">
@@ -291,8 +291,8 @@ char const* index_html = R"rawliteral(
                 targetX: 0,
                 targetY: 0,
                 distance: 0,
-                orientationTarget: 0,
-                orientationCar: 0,
+                camHeading: 0,
+                carHeading: 0,
                 steering: 0,
                 throttle: 0,
             };
@@ -300,9 +300,9 @@ char const* index_html = R"rawliteral(
             let isLockMode = false;
 
             function updateInfoPanel() {
-                document.getElementById("dis").textContent = `dis: ${data.distance}`;
-                document.getElementById("oT").textContent = `oT: ${data.orientationTarget}`;
-                document.getElementById("oC").textContent = `oC: ${data.orientationCar}`;
+                document.getElementById("dist").textContent = `dist: ${data.distance}`;
+                document.getElementById("camHead").textContent = `cam: ${data.camHeading}`;
+                document.getElementById("carHead").textContent = `car: ${data.carHeading}`;
             }
 
             function updateLocationPanel() {
@@ -504,7 +504,7 @@ char const* index_html = R"rawliteral(
             // WebSocket connection and polling logic
             let ws;
             const reconnectInterval = 500; // Reconnection interval (ms)
-            const pollInterval = 100; // Polling interval (ms)
+            const pollInterval = 10; // Polling interval (ms)
 
             const steeringValue = document.getElementById("steering-value");
             const steeringSlider = document.getElementById("steering-slider");
