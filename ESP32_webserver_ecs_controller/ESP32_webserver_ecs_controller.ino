@@ -169,10 +169,10 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         String response = "{";
         response += "\"throttle\":" + String(throttleValue) + ",";
         response += "\"steering\":" + String(steeringValue) + ",";
-        response += "\"d_0\":" + String(distance[0], 2) + ",";
-        response += "\"d_1\":" + String(distance[1], 2) + ",";
-        response += "\"h_0\":" + String(heading[0], 2) + ",";
-        response += "\"h_1\":" + String(heading[1], 2) + ",";
+        response += "\"d0\":" + String(distance[0], 2) + ",";
+        response += "\"d1\":" + String(distance[1], 2) + ",";
+        response += "\"h0\":" + String(heading[0], 2) + ",";
+        response += "\"h1\":" + String(heading[1], 2) + ",";
         response += "\"currentX\":" + String(currentX, 2) + ",";
         response += "\"currentY\":" + String(currentY, 2 ) + ",";
         response += "\"targetX\":" + String(targetX, 2) + ",";
