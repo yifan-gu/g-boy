@@ -211,10 +211,12 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 void receiveUDPData() {
   int packetSize = udpServer.parsePacket();
   if (packetSize) {
-    char packetBuffer[255];
-    int len = udpServer.read(packetBuffer, 255);
-    if (len > 0) {
-      packetBuffer[len] = 0; // Null-terminate the string
+    char packetBuffer[256];
+    int len = udpServer.read(packetBuffer, sizeof(packetBuffer) - 1);
+    if (len > 0) packetBuffer[len] = '\0';
+    if (len == sizeof(packetBuffer) - 1) {
+      Serial.println("Packet truncated due to buffer size.");
+      return;
     }
     String message = String(packetBuffer);
 
