@@ -7,7 +7,7 @@
 
 // #0 is for the anchor that's facing the target.
 // #1 is for the anchor that's fixed on the car.
-#define ANCHOR_INDEX 1
+#define ANCHOR_INDEX 0
 
 #define PI 3.14159265359
 
@@ -164,3 +164,76 @@ void runMPUMeasurement() {
     heading += 360; //  N=0/360, W=90, S=180, E=270
   }
 }
+
+/*------------ Dummy data for testing the server */
+void sendSensorDataSquare() {
+  // Define the waypoints for the square path
+  static const float waypoints[][2] = {
+      {5.0, 5.0},    // Point 1: Top-right
+      {-5.0, 5.0},   // Point 2: Top-left
+      {-5.0, -5.0},  // Point 3: Bottom-left
+      {5.0, -5.0},   // Point 4: Bottom-right
+      {5.0, 5.0}     // Back to Point 1
+  };
+
+  static const int waypointCount = sizeof(waypoints) / sizeof(waypoints[0]);
+
+  static int currentWaypointIndex = 0;  // Index of the current waypoint
+  static unsigned long lastUpdateTime = 0;  // Time tracking for updates
+  const unsigned long updateInterval = 100;  // Update every 100 ms
+
+  static float posX = 5.0;  // Current X position
+  static float posY = 5.0;  // Current Y position
+  const float stepSize = 0.1;  // Movement per step
+
+  // Check if it's time to update
+  unsigned long currentTime = millis();
+  if (currentTime - lastUpdateTime < updateInterval) {
+    return;  // Wait until the next update interval
+  }
+  lastUpdateTime = currentTime;
+
+  // Get the target waypoint
+  float targetX = waypoints[currentWaypointIndex][0];
+  float targetY = waypoints[currentWaypointIndex][1];
+
+  // Calculate the direction to the target waypoint
+  float deltaX = targetX - posX;
+  float deltaY = targetY - posY;
+  float distanceToTarget = sqrt(deltaX * deltaX + deltaY * deltaY);
+
+  // If close enough to the target, move to the next waypoint
+  if (distanceToTarget < stepSize) {
+    posX = targetX;
+    posY = targetY;
+
+    currentWaypointIndex++;
+    if (currentWaypointIndex >= waypointCount) {
+      currentWaypointIndex = 0;  // Loop back to the first waypoint
+    }
+  } else {
+    // Move toward the target waypoint
+    float stepFactor = stepSize / distanceToTarget;
+    posX += deltaX * stepFactor;
+    posY += deltaY * stepFactor;
+  }
+
+  // Calculate distance and heading from (0, 0) to the current position
+  float distance = sqrt(posX * posX + posY * posY);  // Distance from origin
+  float heading = atan2(posY, posX) * (180.0 / PI);  // Heading in degrees
+
+  // Send `distance` and `heading` via UDP
+  String distanceMessage = "distance0=" + String(distance, 2);
+  sendUDP(distanceMessage);
+  distanceMessage = "distance1=" + String(distance, 2);
+  sendUDP(distanceMessage);
+  String headingMessage = "heading" + String(ANCHOR_INDEX) + "=" + String(heading, 2);
+  sendUDP(headingMessage);
+
+  // Print debugging information
+  Serial.println("Position: (" + String(posX, 2) + ", " + String(posY, 2) +
+                 ") | Distance: " + String(distance, 2) +
+                 " | Heading: " + String(heading, 2) +
+                 " | Target: (" + String(targetX, 2) + ", " + String(targetY, 2) + ")");
+}
+

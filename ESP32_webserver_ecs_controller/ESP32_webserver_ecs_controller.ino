@@ -260,7 +260,9 @@ void calculateSteeringThrottle() {
     return;
   }
 
-  if (calculateDistance(currentX, currentY) - calculateDistance(targetX, targetY) <= delta) {
+  if (abs(calculateDistance(currentX, currentY) - calculateDistance(targetX, targetY)) <= delta) {
+    throttleValue = midThrottle;
+    steeringValue = midSteering;
     return;
   }
 
@@ -293,9 +295,13 @@ void calculateCoordinates() {
   // Calculate the relative angle in radians
   if (heading[0] >= 360) {
     heading[0] -= 360;
+  } else if (heading[0] < 0) {
+    heading[0] += 360;
   }
   if (heading[1] >= 360) {
     heading[1] -= 360;
+  } else if (heading[1] < 0) {
+    heading[1] += 360;
   }
   float relativeAngle = radians(heading[0] - heading[1] + 90); // +90 since we are always facing towards +Y axis.
 
