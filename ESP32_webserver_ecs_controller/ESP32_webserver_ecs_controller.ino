@@ -1,9 +1,9 @@
-#include <WiFi.h>
-#include <ESPAsyncWebServer.h>
 #include <ESP32Servo.h>
+#include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <math.h>
-#include <QMC5883LCompass.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
 
 #include "index_html.h"
 
@@ -18,12 +18,12 @@ const char* ssid = "RC-Controller";
 const char* password = "12345678"; // Minimum 8 characters
 const char* hostname = "autocam"; // mDNS hostname
 
+WiFiUDP udpServer;
+unsigned int udpPort = 12345; // UDP port for receiving data
 
 // Async WebSocket server
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
-
-QMC5883LCompass compass;
 
 // Servo objects
 Servo throttle;
@@ -40,11 +40,19 @@ boolean isLockMode = false;
 int throttleValue = midThrottle, steeringValue = midSteering;
 
 // The reported distances and angle.
-float distance = 0; // Distance of the tag to the front anchor.
-float camHeading = 0; // [0, 360)  N = 0/360, W = 90, S = 180, E = 270
-float carHeading = 0; // [0, 360)  N = 0/360, W = 90, S = 180, E = 270
 
-const float delta = 0.5; // Allowed measurement error delta.
+// Distance of the tag to the front anchors.
+// #0 is the anchor on the camera (moveable heading)
+// #1 is the anchor on the car (fixed heading.)
+float distance[] = {0, 0};
+
+// Heading of the anchor.
+// #0 is the anchor on the camera (moveable heading)
+// #1 is the anchor on the car (fixed heading.)
+float heading[] = {0, 0}; // [0, 360)  N = 0/360, W = 90, S = 180, E = 270
+
+const float distanceErrorMargin = 0.5; // The limit to abort the measurement from the two sensors.
+const float delta = 0.5; // The "play" margin.
 
 // The calculated coordinates of the tag.
 float currentX = 0, currentY = 0;
@@ -73,16 +81,15 @@ void setup() {
   }
 
   setupESC();
-  setupWebServer();
-  setupMPU();
+  setupServer();
 }
 
 void loop() {
-  runMPUMeasurement();
+  receiveUDPData();
   calculateCoordinates();
   calculateSteeringThrottle();
   runESCController();
-  runClientHealthCheck();
+  runHealthCheck();
 }
 
 void setupESC() {
@@ -100,8 +107,9 @@ void setupESC() {
   Serial.println("ESC Initialized!");
 }
 
-void setupWebServer() {
- // Start Access Point
+// WiFi, WebServer, UDP, and WebSocket setup
+void setupServer() {
+  // Start Access Point
   WiFi.softAP(ssid, password);
   Serial.println("Access Point started!");
   Serial.print("SSID: ");
@@ -119,6 +127,11 @@ void setupWebServer() {
   Serial.print(hostname);
   Serial.println(".local");
 
+  // Start UDP
+  udpServer.begin(udpPort);
+  Serial.print("Listening for UDP on port ");
+  Serial.println(udpPort);
+
   // Configure WebSocket events
   ws.onEvent(onWebSocketEvent);
   server.addHandler(&ws);
@@ -126,23 +139,12 @@ void setupWebServer() {
   // Serve static files
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(200, "text/html", index_html);
-    });
+  });
 
   // Start server
   server.begin();
 }
 
-void setupMPU() {
-  compass.init();
-  Serial.println("Calibration will begin in 5 seconds.");
-  delay(5000);
-
-  Serial.println("CALIBRATING. Keep moving your sensor...");
-  compass.calibrate();
-  Serial.println("DONE");
-}
-
-// Handle WebSocket events
 // Handle WebSocket events
 void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                       AwsEventType type, void *arg, uint8_t *data, size_t len) {
@@ -163,18 +165,22 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       lastPingTime = millis();
 
       if (message == "REQUEST_DATA") {
+        // Respond with the current state as a JSON string
         String response = "{";
         response += "\"throttle\":" + String(throttleValue) + ",";
         response += "\"steering\":" + String(steeringValue) + ",";
-        response += "\"distance\":" + String(distance) + ",";
-        response += "\"camHeading\":" + String(camHeading) + ",";
-        response += "\"carHeading\":" + String(carHeading) + ",";
-        response += "\"currentX\":" + String(currentX) + ",";
-        response += "\"currentY\":" + String(currentY) + ",";
-        response += "\"targetX\":" + String(targetX) + ",";
-        response += "\"targetY\":" + String(targetY);
+        response += "\"d_0\":" + String(distance[0], 2) + ",";
+        response += "\"d_1\":" + String(distance[1], 2) + ",";
+        response += "\"h_0\":" + String(heading[0], 2) + ",";
+        response += "\"h_1\":" + String(heading[1], 2) + ",";
+        response += "\"currentX\":" + String(currentX, 2) + ",";
+        response += "\"currentY\":" + String(currentY, 2 ) + ",";
+        response += "\"targetX\":" + String(targetX, 2) + ",";
+        response += "\"targetY\":" + String(targetY, 2);
         response += "}";
-        client->text(response); // Send data to the requesting client
+
+        client->text(response); // Send the JSON response to the client
+        //Serial.println("Sent data: " + response);
       } else if (message.startsWith("mode=")) {
         if (message == "mode=lock") {
           isLockMode = true;
@@ -183,23 +189,6 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
           throttleValue = midThrottle;
           steeringValue = midSteering;
         }
-      } else if (message.startsWith("distance=") || message.startsWith("camHeading=")) {
-        int distanceIndex = message.indexOf("distance=");
-        int camHeadingIndex = message.indexOf("camHeading=");
-
-        if (distanceIndex != -1) {
-          int endIndex = message.indexOf("&", distanceIndex);
-          if (endIndex == -1) endIndex = message.length();
-          distance = message.substring(distanceIndex + 9, endIndex).toFloat();
-        }
-
-        if (camHeadingIndex != -1) {
-          int endIndex = message.indexOf("&", camHeadingIndex);
-          if (endIndex == -1) endIndex = message.length();
-          camHeading = message.substring(camHeadingIndex + 11, endIndex).toFloat();
-        }
-      } else if (message.startsWith("carHeading=")) {
-        carHeading = message.substring(15).toFloat();
       } else if (message.startsWith("throttle=")) {
         throttleValue = map(message.substring(9).toInt(), 1000, 2000, minThrottle, maxThrottle);
       } else if (message.startsWith("steering=")) {
@@ -218,6 +207,32 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   }
 }
 
+// Receive UDP data
+void receiveUDPData() {
+  int packetSize = udpServer.parsePacket();
+  if (packetSize) {
+    char packetBuffer[255];
+    int len = udpServer.read(packetBuffer, 255);
+    if (len > 0) {
+      packetBuffer[len] = 0; // Null-terminate the string
+    }
+    String message = String(packetBuffer);
+
+    // Parse the received data
+    if (message.startsWith("distance0=")) {
+      distance[0] = message.substring(10).toFloat();
+    } else if (message.startsWith("distance1=")) {
+      distance[1] = message.substring(10).toFloat();
+    } else if (message.startsWith("heading0=")) {
+      heading[0] = message.substring(9).toFloat();
+    } else if (message.startsWith("heading1=")) {
+      heading[1] = message.substring(9).toFloat();
+    }
+
+    // Update the last ping time
+    lastPingTime = millis();
+  }
+}
 
 void runESCController() {
   steering.writeMicroseconds(steeringValue);
@@ -230,29 +245,14 @@ void runESCController() {
    Serial.println(steeringValue);*/
 }
 
-void runClientHealthCheck() {
-  // Check for heartbeat timeout
-  if (millis() - lastPingTime > heartbeatTimeout) {
-    Serial.println("Heartbeat timeout, reset");
+void runHealthCheck() {
+  unsigned long currentMillis = millis();
+  if (currentMillis > lastPingTime && currentMillis - lastPingTime > heartbeatTimeout) {
+    Serial.printf("Heartbeat timeout, current: %lu, last: %lu, reset\n", currentMillis, lastPingTime);
     throttleValue = midThrottle; // Reset throttle and steering
     steeringValue = midSteering;
     lastPingTime = millis(); // Reset timer to avoid repeated timeouts
   }
-}
-
-void runMPUMeasurement() {
-  compass.read();
-
-  float x = compass.getX();
-  float y = compass.getY();
-
-  carHeading = atan2(x, y) * 180 / PI;
-  if (carHeading < 0) {
-    carHeading += 360; //  N=0/360, W=90, S=180, E=270
-  }
-
-  //Serial.print("
-  //Serial.println(carHeading);
 }
 
 void calculateSteeringThrottle() {
@@ -283,18 +283,25 @@ float calculateDistance(float X, float Y) {
 }
 
 void calculateCoordinates() {
+  // ignore this measurement if the two anchor don't agree with each other.
+  if (abs(distance[0] - distance[1]) > distanceErrorMargin) {
+    return;
+  }
+
+  float avgDistance = (distance[0] + distance[1]) / 2;
+
   // Calculate the relative angle in radians
-  if (camHeading >= 360) {
-    camHeading -= 360;
+  if (heading[0] >= 360) {
+    heading[0] -= 360;
   }
-  if (carHeading >= 360) {
-    carHeading -= 360;
+  if (heading[1] >= 360) {
+    heading[1] -= 360;
   }
-  float relativeAngle = radians(camHeading - carHeading + 90); // +90 since we are always facing towards +Y axis.
+  float relativeAngle = radians(heading[0] - heading[1] + 90); // +90 since we are always facing towards +Y axis.
 
   // Use trigonometry to calculate the coordinates
-  currentX = distance * cos(relativeAngle);
-  currentY = distance * sin(relativeAngle);
+  currentX = avgDistance * cos(relativeAngle);
+  currentY = avgDistance * sin(relativeAngle);
 
   // Serial output for debugging
   //Serial.print("Calculated coordinates (currentX, currentY): ");
