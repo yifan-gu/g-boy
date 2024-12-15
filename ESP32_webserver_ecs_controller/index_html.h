@@ -54,7 +54,7 @@ char const* index_html = R"rawliteral(
                 position: absolute;
                 top: 0px;
                 left: 0px;
-                background-color: rgba(44, 62, 80, 0.9);
+                background-color: rgba(44, 62, 80, 0.1);
                 color: white;
                 padding: 10px 10px;
                 border-radius: 8px;

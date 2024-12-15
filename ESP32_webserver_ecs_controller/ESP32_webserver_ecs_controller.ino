@@ -26,8 +26,8 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
 // Servo objects
-Servo throttle;
-Servo steering;
+Servo throttleServo;
+Servo steeringServo;
 
 // Define throttle and steering ranges
 const int minThrottle = 1000, maxThrottle = 2000, midThrottle = 1500;
@@ -67,8 +67,30 @@ const unsigned long heartbeatTimeout = 1000; // 1 second timeout
 const int steeringChangeValue = 500;
 const int steeringThrottleChangeValue = 200;
 
-int moveThrottle = 200;
+// PID Controller variables for throttle.
+float Kp_t = 100;  // Proportional gain. Diff = Kp_t * distance
+float Ki_t = 0.0;  // Integral gain. Diff = Ki_t * distance * 1000 * second.
+float Kd_t = 0.0;  // Derivative gain. Diff = Kd_t / (speed m/s * 1000 ms)
 
+float previousError_t = 0.0;  // Previous error for the derivative term
+float integral_t = 0.0;       // Accumulated integral term
+
+float minMoveThrottle = -300;    // Minimum throttle value in practice.
+float maxMoveThrottle = 300;  // Maximum throttle value in practice.
+
+// // PID Controller variables for steering.
+float Kp_s = 10;  // Proportional gain. Diff = Kp_s * angle diff.
+float Ki_s = 0.0;  // Integral gain. Diff = Ki_s * angle diff * 1000 * second.
+float Kd_s = 0 ;  // Derivative gain. Diff = Kd_s / (anglur speed * 1000 ms)
+
+float previousError_s = 0.0;  // Previous error for the derivative term
+float integral_s = 0.0;       // Accumulated integral term
+
+float minMoveSteering = -500;    // Minimum steering value in practice.
+float maxMoveSteering = 500;  // Maximum steering value in practice.
+
+float lastDeltaTimeMillis = 0; // Used to calculate ki, and Kd in the PID system.
+float minDeltaTimeMillis = 10; // Control the rate of PID update.
 
 void setup() {
   // Start Serial for debugging
@@ -97,12 +119,12 @@ void setupESC() {
   delay(1000); // Wait 1 seconds to ensure the ESC ready to arm.
 
   // Attach servos
-  throttle.attach(THROTTLE_PIN, minThrottle, maxThrottle);
-  steering.attach(STEERING_PIN, minSteering, maxSteering);
+  throttleServo.attach(THROTTLE_PIN, minThrottle, maxThrottle);
+  steeringServo.attach(STEERING_PIN, minSteering, maxSteering);
 
   // Initialize to neutral positions to arm the ESC.
-  throttle.writeMicroseconds(midThrottle);
-  steering.writeMicroseconds(midSteering);
+  throttleServo.writeMicroseconds(midThrottle);
+  steeringServo.writeMicroseconds(midSteering);
 
   Serial.println("ESC Initialized!");
 }
@@ -155,6 +177,7 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 
     case WS_EVT_DISCONNECT:
       Serial.println("WebSocket disconnected");
+      isLockMode = false;
       throttleValue = midThrottle;
       steeringValue = midSteering;
       Serial.println("Throttle and Steering reset to middle positions");
@@ -237,8 +260,8 @@ void receiveUDPData() {
 }
 
 void runESCController() {
-  steering.writeMicroseconds(steeringValue);
-  throttle.writeMicroseconds(throttleValue);
+  steeringServo.writeMicroseconds(steeringValue);
+  throttleServo.writeMicroseconds(throttleValue);
 
    /*Serial.print("Throttle: ");
    Serial.print(throttleValue);
@@ -262,23 +285,117 @@ void calculateSteeringThrottle() {
     return;
   }
 
-  if (abs(calculateDistance(currentX, currentY) - calculateDistance(targetX, targetY)) <= delta) {
+  float deltaTimeMillis = millis() - lastDeltaTimeMillis;
+  if (deltaTimeMillis < minDeltaTimeMillis) {
+    return; // No change.
+  }
+  lastDeltaTimeMillis = deltaTimeMillis;
+
+  float distanceDiff = abs(calculateDistance(currentX, currentY) - calculateDistance(targetX, targetY));
+
+  if (distanceDiff <= delta) { // No distance change.
     throttleValue = midThrottle;
     steeringValue = midSteering;
     return;
   }
 
+  // Calculate throttle.
+  float throttleDiff = calculateThrottleDiff(distanceDiff, deltaTimeMillis);
+
   if (currentY - targetY > delta) {
-    setMoveForward();
+    setMoveForward(throttleDiff);
   } else if (targetY - currentY > delta) {
-    setMoveBackward();
+    setMoveBackward(throttleDiff);
+  } else if (currentY > 0) { // Parallel moving.
+    setMoveForward(throttleDiff);
+  } else if (currentY < 0) {
+    setMoveBackward(throttleDiff);
   }
 
-  if (currentX - targetX > delta) {
-    setSteeringRight();
-  } else if (targetX - currentX > delta) {
-    setSteeringLeft();
+  if (abs(currentX - targetX) <= delta) {
+    steeringValue = midSteering;
+    return;
   }
+
+  // Calculate steering.
+  float headingDiff = calculateHeadingDiff(currentX, currentY, targetX, targetY);
+  float steeringDiff = calculateSteeringDiff(headingDiff, deltaTimeMillis);
+
+  setSteering(steeringDiff);
+}
+
+// Function to calculate the new throttle diff using PID control.
+float calculateThrottleDiff(float error_t, float deltaTimeMillis) {
+
+  // Step 1: Calculate integral (accumulated error)
+  integral_t += error_t * deltaTimeMillis;
+
+  // Step 2: Calculate derivative (rate of error change)
+  float derivative_t = (error_t - previousError_t) / deltaTimeMillis;
+
+  // Step 3: Compute PID output
+  float throttle = (Kp_t * error_t) + (Ki_t * integral_t) + (Kd_t * derivative_t);
+
+  // Step 4: Constrain throttle within limits
+  throttle = constrain(throttle, minMoveThrottle, maxMoveThrottle);
+
+  // Step 5: Update previous error
+  previousError_t = error_t;
+
+  return throttle;
+}
+
+// Function to calculate the new steering diff using PID control.
+float calculateSteeringDiff(float error_s, float deltaTimeMillis) {
+
+  // Step 1: Calculate integral (accumulated error)
+  integral_s += error_s * deltaTimeMillis;
+
+  // Step 2: Calculate derivative (rate of error change)
+  float derivative_s = (error_s - previousError_s) / deltaTimeMillis;
+
+  // Step 3: Compute PID output
+  float steering = (Kp_s * error_s) + (Ki_s * integral_s) + (Kd_s * derivative_s);
+
+  // Step 4: Constrain throttle within limits
+  steering = constrain(steering, minMoveSteering, maxMoveSteering);
+
+  // Step 5: Update previous error
+  previousError_s = error_s;
+
+  return steering;
+}
+
+
+// Function to calculate heading diff, positive means will turn to the left, negative means will turn to the right.
+float calculateHeadingDiff(float currentX, float currentY, float targetX, float targetY) {
+  // Calculate the dot product
+  float dotProduct = (currentX * targetX) + (currentY * targetY);
+
+  // Calculate the magnitudes of the vectors
+  float magnitude1 = sqrt(currentX * currentX + currentY * currentY);
+  float magnitude2 = sqrt(targetX * targetX + targetY * targetY);
+
+  // Calculate the angle in radians
+  float angleRadians = acos(dotProduct / (magnitude1 * magnitude2));
+
+  // Calculate the cross product to determine the sign
+  float crossProduct = (currentX * targetY) - (currentY * targetX);
+
+  // Convert the angle to degrees
+  float angleDegrees = angleRadians * 180.0 / PI;
+
+  if (currentX - targetX > delta) { // To the right.
+    if (angleDegrees > 0) {
+      angleDegrees = -angleDegrees;
+    }
+  }
+  if (targetX - currentX > delta) { // To the left.
+    if (angleDegrees < 0) {
+      angleDegrees = -angleDegrees;
+    }
+  }
+  return angleDegrees;
 }
 
 float calculateDistance(float X, float Y) {
@@ -329,18 +446,14 @@ void calculateCoordinates() {
   return;
 }
 
-void setSteeringLeft() {
-  steeringValue = midSteering + steeringChangeValue;
+void setSteering(float steeringDiff) {
+  steeringValue = midSteering + steeringDiff;
 }
 
-void setSteeringRight() {
-  steeringValue = midSteering - steeringChangeValue;
+void setMoveForward(float throttleDiff) {
+  throttleValue = midThrottle + throttleDiff;
 }
 
-void setMoveForward() {
-  throttleValue = midThrottle + moveThrottle;
-}
-
-void setMoveBackward() {
-  throttleValue = midThrottle - moveThrottle;
+void setMoveBackward(float throttleDiff) {
+  throttleValue = midThrottle - throttleDiff;
 }

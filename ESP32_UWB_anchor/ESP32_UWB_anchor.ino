@@ -65,7 +65,7 @@ void setup() {
 void loop() {
   DW1000Ranging.loop();
   runMPUMeasurement();
-  sendSensorData();
+  sendSensorDataStraightVertical();
 }
 
 void setupUWBAnchor() {
@@ -166,18 +166,28 @@ void runMPUMeasurement() {
 }
 
 /*------------ Dummy data for testing the server */
+void sendSensorDataStraightVertical() {
+  // Define the waypoints for the square path
+  const float waypoints[][2] = {
+      {10.0, 10.0},    // Point 1: Top-right
+      {10.0, -10.0}   // Point 2: Bottom-right
+  };
+  sendSensorDataWayPoints(waypoints, sizeof(waypoints) / sizeof(waypoints[0]));
+}
+
+/*------------ Dummy data for testing the server */
 void sendSensorDataSquare() {
   // Define the waypoints for the square path
-  static const float waypoints[][2] = {
-      {5.0, 5.0},    // Point 1: Top-right
-      {-5.0, 5.0},   // Point 2: Top-left
-      {-5.0, -5.0},  // Point 3: Bottom-left
-      {5.0, -5.0},   // Point 4: Bottom-right
-      {5.0, 5.0}     // Back to Point 1
+  const float waypoints[][2] = {
+      {10.0, 10.0},    // Point 1: Top-right
+      {-10.0, 10.0},   // Point 2: Top-left
+      {-10.0, -10.0},  // Point 3: Bottom-left
+      {10.0, -10.0}   // Point 4: Bottom-right
   };
+  sendSensorDataWayPoints(waypoints, sizeof(waypoints) / sizeof(waypoints[0]));
+}
 
-  static const int waypointCount = sizeof(waypoints) / sizeof(waypoints[0]);
-
+void sendSensorDataWayPoints(const float waypoints[][2], int waypointCount) {
   static int currentWaypointIndex = 0;  // Index of the current waypoint
   static unsigned long lastUpdateTime = 0;  // Time tracking for updates
   const unsigned long updateInterval = 100;  // Update every 100 ms
@@ -220,7 +230,7 @@ void sendSensorDataSquare() {
 
   // Calculate distance and heading from (0, 0) to the current position
   float distance = sqrt(posX * posX + posY * posY);  // Distance from origin
-  float heading = atan2(posY, posX) * (180.0 / PI);  // Heading in degrees
+  float heading = atan2(posY, posX) * (180.0 / PI) - 90;  // Heading in degrees
 
   // Send `distance` and `heading` via UDP
   String distanceMessage = "distance0=" + String(distance, 2);
