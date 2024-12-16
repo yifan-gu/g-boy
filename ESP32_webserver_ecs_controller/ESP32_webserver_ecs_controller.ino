@@ -42,16 +42,13 @@ int throttleValue = midThrottle, steeringValue = midSteering;
 // The reported distances and angle.
 
 // Distance of the tag to the front anchors.
-// #0 is the anchor on the camera (moveable heading)
-// #1 is the anchor on the car (fixed heading.)
-float distance[] = {0, 0};
+float distance = 0;
+float targetDistance = 0;
 
 // Heading of the anchor.
-// #0 is the anchor on the camera (moveable heading)
-// #1 is the anchor on the car (fixed heading.)
-float heading[] = {0, 0}; // [0, 360)  N = 0/360, W = 90, S = 180, E = 270
+float heading = 0; // [0, 360)  N = 0/360, W = 90, S = 180, E = 270
+float targetHeading = 0;
 
-const float distanceErrorMargin = 0.5; // The limit to abort the measurement from the two sensors.
 const float delta = 0.5; // The "play" margin.
 
 // The calculated coordinates of the tag.
@@ -59,6 +56,8 @@ float currentX = 0, currentY = 0;
 
 // The target coordinates to match.
 float targetX = 0, targetY = 0;
+
+
 
 // Heartbeat tracking
 unsigned long lastPingTime = 0;           // Time of last received ping
@@ -192,10 +191,8 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         String response = "{";
         response += "\"throttle\":" + String(throttleValue) + ",";
         response += "\"steering\":" + String(steeringValue) + ",";
-        response += "\"d0\":" + String(distance[0], 2) + ",";
-        response += "\"d1\":" + String(distance[1], 2) + ",";
-        response += "\"h0\":" + String(heading[0], 2) + ",";
-        response += "\"h1\":" + String(heading[1], 2) + ",";
+        response += "\"d\":" + String(distance, 2) + ",";
+        response += "\"h\":" + String(heading, 2) + ",";
         response += "\"currentX\":" + String(currentX, 2) + ",";
         response += "\"currentY\":" + String(currentY, 2 ) + ",";
         response += "\"targetX\":" + String(targetX, 2) + ",";
@@ -243,15 +240,17 @@ void receiveUDPData() {
     }
     String message = String(packetBuffer);
 
-    // Parse the received data
-    if (message.startsWith("distance0=")) {
-      distance[0] = message.substring(10).toFloat();
-    } else if (message.startsWith("distance1=")) {
-      distance[1] = message.substring(10).toFloat();
-    } else if (message.startsWith("heading0=")) {
-      heading[0] = message.substring(9).toFloat();
-    } else if (message.startsWith("heading1=")) {
-      heading[1] = message.substring(9).toFloat();
+    // Parse the received data in the format "distance=x&heading=y"
+    int distanceIndex = message.indexOf("distance=");
+    int headingIndex = message.indexOf("heading=");
+
+    if (distanceIndex != -1 && headingIndex != -1) {
+      String distanceValue = message.substring(distanceIndex + 9, message.indexOf("&"));
+      String headingValue = message.substring(headingIndex + 8);
+
+      // Convert and store values
+      distance = distanceValue.toFloat();  // Assuming distance[0] for storage
+      heading = headingValue.toFloat();    // Assuming heading[0] for storage
     }
 
     // Update the last ping time
@@ -291,7 +290,7 @@ void calculateSteeringThrottle() {
   }
   lastDeltaTimeMillis = deltaTimeMillis;
 
-  float distanceDiff = abs(calculateDistance(currentX, currentY) - calculateDistance(targetX, targetY));
+  float distanceDiff = abs(distance - targetDistance);
 
   if (distanceDiff <= delta) { // No distance change.
     throttleValue = midThrottle;
@@ -302,14 +301,20 @@ void calculateSteeringThrottle() {
   // Calculate throttle.
   float throttleDiff = calculateThrottleDiff(distanceDiff, deltaTimeMillis);
 
+  boolean moveForward = false;
+  boolean moveBackward = false;
   if (currentY - targetY > delta) {
     setMoveForward(throttleDiff);
+    moveForward = true;
   } else if (targetY - currentY > delta) {
     setMoveBackward(throttleDiff);
+    moveBackward = true;
   } else if (currentY > 0) { // Parallel moving.
     setMoveForward(throttleDiff);
+    moveForward = true;
   } else if (currentY < 0) {
     setMoveBackward(throttleDiff);
+    moveBackward = true;
   }
 
   if (abs(currentX - targetX) <= delta) {
@@ -318,10 +323,13 @@ void calculateSteeringThrottle() {
   }
 
   // Calculate steering.
-  float headingDiff = calculateHeadingDiff(currentX, currentY, targetX, targetY);
+  float headingDiff = heading - targetHeading; // headingDiff < 0 means it's turning clockwise; headingDiff > 0 means it's turning counterclockwise.
   float steeringDiff = calculateSteeringDiff(headingDiff, deltaTimeMillis);
-
-  setSteering(steeringDiff);
+  if (moveForward) {
+    setSteering(steeringDiff);
+  } else if (moveBackward) {
+    setSteering(-steeringDiff); // In reverse, we need to turn the other way around.
+  }
 }
 
 // Function to calculate the new throttle diff using PID control.
@@ -366,67 +374,13 @@ float calculateSteeringDiff(float error_s, float deltaTimeMillis) {
   return steering;
 }
 
-
-// Function to calculate heading diff, positive means will turn to the left, negative means will turn to the right.
-float calculateHeadingDiff(float currentX, float currentY, float targetX, float targetY) {
-  // Calculate the dot product
-  float dotProduct = (currentX * targetX) + (currentY * targetY);
-
-  // Calculate the magnitudes of the vectors
-  float magnitude1 = sqrt(currentX * currentX + currentY * currentY);
-  float magnitude2 = sqrt(targetX * targetX + targetY * targetY);
-
-  // Calculate the angle in radians
-  float angleRadians = acos(dotProduct / (magnitude1 * magnitude2));
-
-  // Calculate the cross product to determine the sign
-  float crossProduct = (currentX * targetY) - (currentY * targetX);
-
-  // Convert the angle to degrees
-  float angleDegrees = angleRadians * 180.0 / PI;
-
-  if (currentX - targetX > delta) { // To the right.
-    if (angleDegrees > 0) {
-      angleDegrees = -angleDegrees;
-    }
-  }
-  if (targetX - currentX > delta) { // To the left.
-    if (angleDegrees < 0) {
-      angleDegrees = -angleDegrees;
-    }
-  }
-  return angleDegrees;
-}
-
-float calculateDistance(float X, float Y) {
-  // Euclidean distance formula
-  return sqrt(pow(X, 2) + pow(Y, 2));
-}
-
 void calculateCoordinates() {
-  // ignore this measurement if the two anchor don't agree with each other.
-  if (abs(distance[0] - distance[1]) > distanceErrorMargin) {
-    return;
-  }
-
-  float avgDistance = (distance[0] + distance[1]) / 2;
-
-  // Calculate the relative angle in radians
-  if (heading[0] >= 360) {
-    heading[0] -= 360;
-  } else if (heading[0] < 0) {
-    heading[0] += 360;
-  }
-  if (heading[1] >= 360) {
-    heading[1] -= 360;
-  } else if (heading[1] < 0) {
-    heading[1] += 360;
-  }
-  float relativeAngle = radians(heading[0] - heading[1] + 90); // +90 since we are always facing towards +Y axis.
+  // Calculate the heading angle in radians
+  float headingRadians = radians(heading + 90); // +90 since we are always facing towards +Y axis.
 
   // Use trigonometry to calculate the coordinates
-  currentX = avgDistance * cos(relativeAngle);
-  currentY = avgDistance * sin(relativeAngle);
+  currentX = distance * cos(headingRadians);
+  currentY = distance * sin(headingRadians);
 
   // Serial output for debugging
   //Serial.print("Calculated coordinates (currentX, currentY): ");
@@ -437,6 +391,8 @@ void calculateCoordinates() {
   if (!isLockMode) { // Update the target coordinates if not in lock mode
     targetX = currentX;
     targetY = currentY;
+    targetDistance = distance;
+    targetHeading = heading;
     //Serial.print("Updated target coordinates (targetX, targetY): ");
     //Serial.print(targetX);
     //Serial.print(", ");

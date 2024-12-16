@@ -1,23 +1,16 @@
 #include <WiFi.h>
 #include <SPI.h>
-#include <QMC5883LCompass.h>
 
 #include "DW1000Ranging.h"
 #include "DW1000.h"
 
-// #0 is for the anchor that's facing the target.
-// #1 is for the anchor that's fixed on the car.
-#define ANCHOR_INDEX 0
-
 #define PI 3.14159265359
 
 // leftmost two bytes below will become the "short address"
-// "FF" is the place_holder.
-char anchor_addr[] = "FF:00:5B:D5:A9:9A:E2:9C";
-const uint8_t anchor_addr_prefix = 0x80;
+char anchor_addr[] = "80:00:5B:D5:A9:9A:E2:9C";
 
 //calibrated Antenna Delay setting for this anchor
-uint16_t Adelay[] = {16630, 16610};
+uint16_t Adelay = 16630;
 
 #define SPI_SCK 18
 #define SPI_MISO 19
@@ -45,8 +38,6 @@ const unsigned int udpServerPort = 12345;
 float distance = 0;
 float heading = 0;
 
-QMC5883LCompass compass;
-
 void setup() {
   // Start Serial for debugging
   unsigned long startTime = millis();
@@ -59,13 +50,11 @@ void setup() {
 
   setupUWBAnchor();
   setupWiFi();
-  setupMPU();
 }
 
 void loop() {
   DW1000Ranging.loop();
-  runMPUMeasurement();
-  sendSensorDataStraightVertical();
+  sendSensorDataSquare();
 }
 
 void setupUWBAnchor() {
@@ -74,23 +63,14 @@ void setupUWBAnchor() {
   DW1000Ranging.initCommunication(PIN_RST, PIN_SS, PIN_IRQ); //Reset, CS, IRQ pin
 
   // set antenna delay for anchors only. Tag is default (16384)
-  DW1000.setAntennaDelay(Adelay[ANCHOR_INDEX]);
+  DW1000.setAntennaDelay(Adelay);
 
   DW1000Ranging.attachNewRange(newRange);
   DW1000Ranging.attachNewDevice(newDevice);
   DW1000Ranging.attachInactiveDevice(inactiveDevice);
 
   //start the module as an anchor, do not assign random short address
-  DW1000Ranging.startAsAnchor(getAnchorAddr(), DW1000.MODE_LONGDATA_RANGE_LOWPOWER, false);
-}
-
-char* getAnchorAddr() {
-  // Convert char* anchor_addr_base to a String and concatenate
-  String addrPrefix = String(anchor_addr_prefix + ANCHOR_INDEX, HEX);
-  const char *prefix = addrPrefix.c_str();
-  anchor_addr[0] = prefix[0];
-  anchor_addr[1] = prefix[1];
-  return anchor_addr;
+  DW1000Ranging.startAsAnchor(anchor_addr, DW1000.MODE_LONGDATA_RANGE_LOWPOWER, false);
 }
 
 void setupWiFi() {
@@ -113,22 +93,10 @@ void setupWiFi() {
   }
 }
 
-void setupMPU() {
-  compass.init();
-  Serial.println("Calibration will begin in 5 seconds.");
-  delay(5000);
-
-  Serial.println("CALIBRATING. Keep moving your sensor...");
-  compass.calibrate();
-  Serial.println("DONE");
-}
-
 void sendSensorData() {
   // Send `distance` data
-  String distanceMessage = "distance"+ String(ANCHOR_INDEX) + "=" + String(distance, 2);
-  sendUDP(distanceMessage);
-  String headingMessage = "heading" + String(ANCHOR_INDEX) + "=" + String(heading, 2);
-  sendUDP(headingMessage);
+  String message = "distance=" + String(distance, 2) + "&heading=" + String(heading, 2);
+  sendUDP(message);
   delay(10); // 100Hz.
 }
 
@@ -151,18 +119,6 @@ void newDevice(DW1000Device *device) {
 void inactiveDevice(DW1000Device *device) {
   Serial.print("Delete inactive device: ");
   Serial.println(device->getShortAddress(), HEX);
-}
-
-void runMPUMeasurement() {
-  compass.read();
-
-  float x = compass.getX();
-  float y = compass.getY();
-
-  heading = atan2(x, y) * 180 / PI;
-  if (heading < 0) {
-    heading += 360; //  N=0/360, W=90, S=180, E=270
-  }
 }
 
 /*------------ Dummy data for testing the server */
@@ -192,8 +148,8 @@ void sendSensorDataWayPoints(const float waypoints[][2], int waypointCount) {
   static unsigned long lastUpdateTime = 0;  // Time tracking for updates
   const unsigned long updateInterval = 100;  // Update every 100 ms
 
-  static float posX = 5.0;  // Current X position
-  static float posY = 5.0;  // Current Y position
+  static float posX = 0;  // Current X position
+  static float posY = 0;  // Current Y position
   const float stepSize = 0.1;  // Movement per step
 
   // Check if it's time to update
@@ -230,15 +186,14 @@ void sendSensorDataWayPoints(const float waypoints[][2], int waypointCount) {
 
   // Calculate distance and heading from (0, 0) to the current position
   float distance = sqrt(posX * posX + posY * posY);  // Distance from origin
-  float heading = atan2(posY, posX) * (180.0 / PI) - 90;  // Heading in degrees
+  float heading = atan2(posY, posX) * (180.0 / PI) - 90;  // Heading in degrees. -90 since the heading is calculated from the N direction.
+  if (heading < 0) {
+    heading += 360;
+  }
 
   // Send `distance` and `heading` via UDP
-  String distanceMessage = "distance0=" + String(distance, 2);
-  sendUDP(distanceMessage);
-  distanceMessage = "distance1=" + String(distance, 2);
-  sendUDP(distanceMessage);
-  String headingMessage = "heading" + String(ANCHOR_INDEX) + "=" + String(heading, 2);
-  sendUDP(headingMessage);
+  String message = "distance=" + String(distance, 2) + "&heading=" + String(heading, 2);
+  sendUDP(message);
 
   // Print debugging information
   Serial.println("Position: (" + String(posX, 2) + ", " + String(posY, 2) +
